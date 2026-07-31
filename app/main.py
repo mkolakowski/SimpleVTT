@@ -120,6 +120,48 @@ async def _visitor_request_log_mw(request: Request, call_next):
     )
     return response
 
+# v2.1035.0 — HTTP security-headers hardening. Adds the standard defensive
+# response headers the security audit found missing (clickjacking, MIME-sniff,
+# referrer leakage, and a Content-Security-Policy as a second line of defense
+# behind the app's existing output-escaping). Registered AFTER the visitor-log
+# middleware so it sits OUTERMOST and stamps the final response.
+#
+# The CSP intentionally allows ``'unsafe-inline'`` for script/style because the
+# templates use inline event handlers + ``style=`` attributes; it still blocks
+# external script origins, framing (``frame-ancestors 'none'``), plugins
+# (``object-src 'none'``), and base-tag hijacking. Both the whole feature and
+# the exact policy are env-overridable so an operator can relax or tighten
+# without a code change. HSTS is emitted only when the deploy is HTTPS
+# (``SESSION_COOKIE_SECURE=true``) so it never pins a plaintext dev box.
+_SECURITY_HEADERS_ENABLED = os.getenv(
+    "SECURITY_HEADERS_ENABLED", "true").strip().lower() in ("1", "true", "yes", "on")
+_DEFAULT_CSP = (
+    "default-src 'self'; base-uri 'self'; object-src 'none'; "
+    "frame-ancestors 'none'; img-src 'self' data: blob:; "
+    "media-src 'self' blob:; style-src 'self' 'unsafe-inline'; "
+    "script-src 'self' 'unsafe-inline'; connect-src 'self'; font-src 'self' data:"
+)
+_CONTENT_SECURITY_POLICY = os.getenv("CONTENT_SECURITY_POLICY", _DEFAULT_CSP).strip()
+
+
+@app.middleware("http")
+async def _security_headers_mw(request: Request, call_next):
+    response = await call_next(request)
+    if not _SECURITY_HEADERS_ENABLED:
+        return response
+    h = response.headers
+    # setdefault: never clobber a header a handler set deliberately.
+    h.setdefault("X-Content-Type-Options", "nosniff")
+    h.setdefault("X-Frame-Options", "DENY")
+    h.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    h.setdefault("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
+    if _CONTENT_SECURITY_POLICY:
+        h.setdefault("Content-Security-Policy", _CONTENT_SECURITY_POLICY)
+    if _COOKIE_SECURE:
+        h.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+    return response
+
+
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 STATIC_DIR.mkdir(exist_ok=True)
 (STATIC_DIR / "uploads" / "maps").mkdir(parents=True, exist_ok=True)

@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1035.0] - 2026-07-31 — "The Hard Hat"
+
+**Schema version:** 103
+
+**Commit summary:** Add an HTTP security-headers middleware to the main app — CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy (+ HSTS on HTTPS) — closing the "no security headers" gap from the security audit.
+
+**Description:** Security hardening (defense-in-depth), first of the audit follow-ups. A read-only security review found the internet-facing app set **no** defensive response headers, so any single output-escaping miss had no second line of defense and the tabletop was framable for clickjacking. This adds a middleware (`_security_headers_mw`, registered outermost after the visitor-log middleware) that stamps every response with:
+
+- `Content-Security-Policy` — `default-src 'self'` with `frame-ancestors 'none'`, `object-src 'none'`, `base-uri 'self'`, and same-origin `img`/`media`/`connect`/`font`. Allows `'unsafe-inline'` for `script`/`style` because the templates use inline handlers + `style=` attributes (tightening to nonces is a future pass) — it still blocks external script origins, framing, and plugins.
+- `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy: geolocation=(), microphone=(), camera=()`.
+- `Strict-Transport-Security` — emitted **only** when `SESSION_COOKIE_SECURE=true` (an HTTPS deploy), so it never pins a plaintext dev box.
+
+All headers use `setdefault` so a handler that sets its own value wins. The whole feature (`SECURITY_HEADERS_ENABLED`, default on) and the exact policy (`CONTENT_SECURITY_POLICY`, empty string omits the CSP) are env-overridable so an operator can relax or tighten without a code change. No behavior change to any endpoint.
+
+### Added
+- `app/main.py` — `_security_headers_mw` middleware + `SECURITY_HEADERS_ENABLED` / `CONTENT_SECURITY_POLICY` env reads.
+- `.env.example` — documented "HTTP security headers" section.
+- `tests/harness/test_security_headers.py` — 3 tests: full header set present on a public endpoint, CSP carries the restrictive directives, and headers are stamped on HTML pages too.
+
+---
+
 ## [2.1034.1] - 2026-07-31 — "The Closed Loophole"
 
 **Schema version:** 103
