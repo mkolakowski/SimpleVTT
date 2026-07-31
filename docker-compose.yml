@@ -24,7 +24,11 @@ services:
       retries: 5
 
   app:
-    build: .
+    # v2.1042.2 — build the `app` target: internet-facing image with no compiler
+    # toolchain and no Chromium (that lives only in the admin-center image).
+    build:
+      context: .
+      target: app
     image: simplevtt-app:latest
     container_name: simplevtt-app
     restart: unless-stopped
@@ -158,8 +162,12 @@ services:
   # On by default; set ADMIN_CENTER_PASS in .env before exposing
   # off-host (the dashboard nags while the default password is in use).
   admin-center:
-    build: .
-    image: simplevtt-app:latest
+    # v2.1042.2 — build the `admin-center` target: the app image + headless
+    # Chromium for the self-test's video capture. Distinct image from `app`.
+    build:
+      context: .
+      target: admin-center
+    image: simplevtt-admin-center:latest
     container_name: simplevtt-admin-center
     restart: unless-stopped
     depends_on:

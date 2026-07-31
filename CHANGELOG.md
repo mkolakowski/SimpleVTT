@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1042.2] - 2026-07-31 — "The Annex"
+
+**Schema version:** 103
+
+**Commit summary:** Split Chromium into an `admin-center`-only image target so the internet-facing `app` image ships no browser (multi-target build).
+
+**Description:** Security hardening (audit follow-up, infra batch) — completes v2.1042.1. The `app` and `admin-center` services shared one image, so the internet-facing app carried headless Chromium + its X11/font libs even though only the operator self-test uses them. The Dockerfile is now multi-**target**: the `app` stage is the public runtime (no compiler, no Chromium, no curl); the `admin-center` stage is `FROM app` + Chromium. `docker-compose.yml` builds each service against its target (`app` → `simplevtt-app`, `admin-center` → `simplevtt-admin-center`).
+
+Verified on a full rebuild of both targets: the **app** image has **no** Chromium (`/ms-playwright` absent, `libnss3` not installed) yet still boots + imports `app.main`; the **admin-center** image has Chromium (`chromium-1134` + `ffmpeg`) and reports **healthy**; both serve their endpoints (app 8013 + admin-center 8015 → 200). The **app image shrank from ~2.18 GB to ~1.08 GB** (roughly halved).
+
+### Changed
+- `Dockerfile` — third stage `admin-center` (`FROM app` + Chromium libs + `playwright install chromium`); the `app` stage no longer installs the browser or its libs.
+- `docker-compose.yml` — `app` builds `target: app` (image `simplevtt-app`), `admin-center` builds `target: admin-center` (image `simplevtt-admin-center`).
+
+### Note
+- `docker-compose.ghcr.yml` (pull-and-run, app-only, no admin-center service) is unchanged; the published app image should be built from `target: app` by whatever publishes it.
+
+---
+
 ## [2.1042.1] - 2026-07-31 — "The Clean Room"
 
 **Schema version:** 103

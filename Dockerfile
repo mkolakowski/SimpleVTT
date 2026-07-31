@@ -1,12 +1,16 @@
 # Multi-arch (works on amd64 + arm64) Python base.
 #
-# v2.1042.1 — multi-stage build (security hardening). The build toolchain
-# (build-essential / libpq-dev) lives ONLY in the throwaway `builder` stage
-# where wheels are compiled; the final runtime image copies just the installed
-# packages, so the internet-facing container ships no compiler (no in-container
-# compilation for an attacker, smaller CVE surface). Chromium stays in the
-# runtime image because the shared image also runs the admin-center self-test;
-# splitting it into a separate admin-center-only image is a further step.
+# v2.1042.2 — multi-STAGE + multi-TARGET build (security hardening).
+#   * builder      — has the compiler toolchain (build-essential/libpq-dev);
+#                    compiles wheels. Thrown away.
+#   * app          — the internet-facing image. No compiler, no Chromium, no
+#                    curl. This is what the `app` service builds
+#                    (docker-compose `target: app`).
+#   * admin-center — FROM app + Chromium (browser binary + X11/font libs) for
+#                    the operator self-test's video capture. Only the
+#                    `admin-center` service builds this (`target: admin-center`).
+# So the public app image ships neither a compiler nor a browser; the heavy,
+# frequently-CVE'd Chromium lives only in the operator-only admin-center image.
 
 # ---------- Stage 1: builder (has the compiler toolchain) ----------
 FROM python:3.12-slim AS builder
@@ -23,20 +27,16 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# ---------- Stage 2: runtime (no compiler toolchain) ----------
-FROM python:3.12-slim
+# ---------- Stage 2: app (internet-facing runtime — no compiler, no Chromium) ----------
+FROM python:3.12-slim AS app
 
 # Runtime system deps only:
 #   - gosu: the entrypoint drops from root to appuser after chowning volumes.
-#   - Chromium runtime libs + fonts: the Admin-Center self-test video capture.
-# NOTE: no build-essential / libpq-dev (psycopg2-binary bundles libpq) and no
-# curl (app + admin-center healthchecks use python3 urllib).
+# NOTE: no build-essential / libpq-dev (psycopg2-binary bundles libpq), no curl
+# (healthchecks use python3 urllib), and no Chromium libs (browser lives only in
+# the admin-center image below).
 RUN apt-get update && apt-get install -y --no-install-recommends \
         gosu \
-        libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 \
-        libdbus-1-3 libxkbcommon0 libatspi2.0-0 libxcomposite1 libxdamage1 \
-        libxfixes3 libxrandr2 libgbm1 libpango-1.0-0 libcairo2 libasound2 \
-        libxcb1 libx11-6 libx11-xcb1 libxext6 libxcb-shm0 fonts-liberation \
     && rm -rf /var/lib/apt/lists/*
 
 # Bring in the Python packages compiled in the builder stage (site-packages +
@@ -106,14 +106,6 @@ RUN groupadd --system appuser \
     && useradd --system --gid appuser --home /app --shell /sbin/nologin appuser \
     && chown -R appuser:appuser /app /var/log/simplevtt
 
-# v2.985.0 — headless Chromium for the Admin-Center self-test video capture.
-# Installed to a shared path (not /root) + chowned so the unprivileged appuser
-# can launch it at runtime. The runtime libs it needs are apt-installed above;
-# `playwright install chromium` only downloads the browser binary.
-ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
-RUN playwright install chromium \
-    && chown -R appuser:appuser /ms-playwright
-
 # Install the entrypoint that does chown-then-drop.
 COPY scripts/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 
@@ -129,3 +121,28 @@ EXPOSE 8015
 # entrypoint forwards "$@" to gosu.
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port \"${APP_PORT:-8013}\" --proxy-headers --no-server-header"]
+
+
+# ---------- Stage 3: admin-center (app + headless Chromium) ----------
+# Only the operator-only admin-center service builds this target. It layers the
+# Chromium browser + its X11/font runtime libs onto the `app` image so the
+# self-test can capture tabletop video; the internet-facing `app` image ships
+# none of it. Inherits ENTRYPOINT/CMD from `app` — the admin-center compose
+# service overrides `command:` to launch app.admin_center.main.
+FROM app AS admin-center
+
+# v2.985.0 — Chromium runtime libs + fonts. Installed by hand (not
+# `playwright install --with-deps`, which maps to Ubuntu font packages absent
+# on the Debian python:slim base).
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 \
+        libdbus-1-3 libxkbcommon0 libatspi2.0-0 libxcomposite1 libxdamage1 \
+        libxfixes3 libxrandr2 libgbm1 libpango-1.0-0 libcairo2 libasound2 \
+        libxcb1 libx11-6 libx11-xcb1 libxext6 libxcb-shm0 fonts-liberation \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install the browser to a shared path (not /root) + chown so the unprivileged
+# appuser (created in the `app` stage) can launch it at runtime.
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+RUN playwright install chromium \
+    && chown -R appuser:appuser /ms-playwright
