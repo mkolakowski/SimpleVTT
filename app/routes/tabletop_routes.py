@@ -122368,6 +122368,7 @@ def open5e_monsters_proxy(
     cr_max: str = "",
     campaign_id: int | None = None,
     db: Session = Depends(get_db),
+    user: User = Depends(require_user),
 ):
     """Proxy for the Open5e v2 creatures endpoint.
 

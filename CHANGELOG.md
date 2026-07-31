@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1041.1] - 2026-07-31 — "The Warded Menagerie"
+
+**Schema version:** 103
+
+**Commit summary:** Require login on `GET /api/open5e/monsters` — the sibling of the item proxy, same unauthenticated outbound-relay class.
+
+**Description:** Security fix (audit follow-up). The Open5e monster-search proxy (`open5e_monsters_proxy`) took no auth, the same gap fixed for `/api/open5e/items` in v2.1040.2. All four callers (encounter beast-picker, tabletop GM tools, campaign settings) are already behind login, so gating it removes an unauthenticated server-side request relay with no UI impact. Added `Depends(require_user)`; anonymous callers now get `401`.
+
+### Changed
+- `app/routes/tabletop_routes.py::open5e_monsters_proxy` — now requires `require_user`.
+
+### Added
+- `tests/harness/test_open5e_monsters_auth.py` — error-path test (unauthenticated → 401).
+
+---
+
 ## [2.1041.0] - 2026-07-31 — "The Loopback"
 
 **Schema version:** 103
