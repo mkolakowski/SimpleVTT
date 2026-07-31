@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1039.0] - 2026-07-31 — "The Cooldown"
+
+**Schema version:** 103
+
+**Commit summary:** Add a per-IP brute-force throttle to the main app's password login — 429 after LOGIN_MAX_ATTEMPTS failed sign-ins within LOGIN_WINDOW_SECONDS — mirroring the admin-center's existing guard.
+
+**Description:** Security hardening (audit follow-up, DoS batch). The main app's `POST /login` had no application-level rate limiting; the only brute-force defense was the optional fail2ban profile. This adds `app/login_rate_limit.py` (a direct mirror of `app/admin_center/login_guard.py`): after `LOGIN_MAX_ATTEMPTS` (default 10) failed sign-ins from one IP within `LOGIN_WINDOW_SECONDS` (default 900), that IP receives `429` until the window passes; a successful login clears its counter. In-process + best-effort (resets on restart — the safe direction). The client IP is resolved via the shared `audit_log._extract_client_ip` (honoring `TRUSTED_PROXY_HOPS`), and a new `auth.login_ratelimited` audit event fires on a throttled attempt.
+
+The window/threshold logic is a pure, stdlib-only, unit-tested module (clock + store injected). No live integration test trips the limit: it's per-IP and the harness shares one source IP, so locking it out would break other tests — and the harness's constant *successful* logins reset the counter anyway.
+
+### Added
+- `app/login_rate_limit.py` — `lockout_remaining` / `record_failure` / `reset` + `LOGIN_MAX_ATTEMPTS` / `LOGIN_WINDOW_SECONDS` config.
+- `.env.example` — documented "Login brute-force throttle" section (with the `TRUSTED_PROXY_HOPS` caveat).
+- `tests/harness/test_login_rate_limit.py` — 6 in-process unit tests (below/at threshold, window expiry, reset, per-IP isolation, config defaults/override).
+
+### Changed
+- `app/routes/auth_routes.py::login_submit` — throttle check (429) before authenticating, `record_failure` on bad credentials, `reset` on success.
+
+---
+
 ## [2.1038.0] - 2026-07-31 — "The Bouncer"
 
 **Schema version:** 103

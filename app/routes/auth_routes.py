@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
@@ -9,7 +10,8 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
 from .. import auth as auth_mod
-from ..audit_log import audit
+from .. import login_rate_limit
+from ..audit_log import _extract_client_ip, audit
 from ..auth import (
     authenticate_local,
     get_or_create_google_user,
@@ -157,8 +159,31 @@ def login_submit(
     next: str = Form("/"),
     db: Session = Depends(get_db),
 ):
+    # v2.1039.0 — per-IP brute-force throttle (security audit). Lock an IP out
+    # after LOGIN_MAX_ATTEMPTS failed sign-ins within LOGIN_WINDOW_SECONDS.
+    ip = _extract_client_ip(request)
+    remaining = login_rate_limit.lockout_remaining(ip, now=time.time())
+    if remaining > 0:
+        audit(
+            "auth.login_ratelimited",
+            level=logging.WARNING,
+            request=request,
+            username=email.lower().strip(),
+        )
+        return templates.TemplateResponse(
+            "login.html",
+            {
+                "request": request,
+                "settings": get_settings(),
+                "error": f"Too many failed attempts. Try again in {remaining} seconds.",
+                "google_enabled": get_settings().google_sso.enabled,
+                "next_path": _safe_next_path(next),
+            },
+            status_code=429,
+        )
     user = authenticate_local(db, email, password)
     if not user:
+        login_rate_limit.record_failure(ip, now=time.time())
         audit(
             "auth.login_failed",
             level=logging.WARNING,
@@ -176,6 +201,7 @@ def login_submit(
             },
             status_code=401,
         )
+    login_rate_limit.reset(ip)
     # Refresh admin status from config every login
     settings = get_settings()
     if settings.is_admin_email(user.email) and not user.is_admin:
