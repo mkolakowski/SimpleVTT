@@ -116,6 +116,17 @@ _ADMIN_TOOLS_ENABLED = os.getenv(
 def _demo_mode() -> bool:
     return os.getenv("DEMO_MODE", "").strip().lower() in ("1", "true", "yes")
 
+
+def _uploads_disabled() -> bool:
+    """v2.1034.1 — mirror ``app.auth.uploads_disabled_in_demo`` for the
+    admin-center app (which reads DEMO_* directly rather than via the cached
+    Settings object). A locked-down public demo (``DEMO_MODE`` +
+    ``DEMO_DISABLE_UPLOADS``, the latter default-true) blocks the admin-center
+    map upload so no file lands in the shared uploads volume."""
+    if not _demo_mode():
+        return False
+    return os.getenv("DEMO_DISABLE_UPLOADS", "true").strip().lower() in ("1", "true", "yes", "on")
+
 # Reuse the main site's favicon (baked into the same image at
 # app/static/favicon.svg). The admin center has no /static mount, so
 # it's served via the dedicated /favicon.svg route below.
@@ -1839,6 +1850,8 @@ async def admin_campaign_map_upload(
     blocked = _destructive_gate(request)
     if blocked is not None:
         return blocked
+    if _uploads_disabled():
+        return _campaign_redirect(campaign_id, err="Uploads are disabled on this demo instance")
     import uuid
     image_url = None
     if image is not None and image.filename:

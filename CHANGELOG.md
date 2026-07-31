@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1034.1] - 2026-07-31 — "The Closed Loophole"
+
+**Schema version:** 103
+
+**Commit summary:** Widen the v2.1034.0 upload lockdown to the remaining paths that could still write to the uploads volume on a locked demo — the two admin upload endpoints, the admin-center map upload, and the optional campaign-thumbnail side channels — for a fully airtight public demo.
+
+**Description:** Feature hardening, follow-on to "The Velvet Rope". v2.1034.0 gated the 11 dedicated *user-facing* upload endpoints, but three narrower write paths remained: (1) the admin `POST /campaign/{id}/thumbnail` + `POST /campaign/{id}/maps` routes (reachable by the demo GM if `DEMO_GM_SITE_ADMIN=true`), (2) the separate admin-center `POST /campaigns/{id}/maps` map upload, and (3) the *optional* thumbnail attached to campaign create / settings-save. All now respect `DEMO_DISABLE_UPLOADS` (still only when `DEMO_MODE` is also true).
+
+- **Admin routes** (`admin_routes.py`) — `admin_upload_thumbnail` + `admin_upload_map` gain `Depends(require_uploads_enabled)`, same 403 as the user-facing endpoints.
+- **Admin-center map upload** (`admin_center/main.py`) — a local `_uploads_disabled()` mirror (the admin-center reads `DEMO_*` directly, not via the cached `Settings`) short-circuits after the destructive gate with the redirect error "Uploads are disabled on this demo instance".
+- **Thumbnail side channels** (`create_campaign`, `campaign_settings_save`) — the endpoints stay fully functional (blocking them would break campaign creation / settings); only the *thumbnail save* is skipped via `not uploads_disabled_in_demo()`, so no file lands while the campaign is still created/saved. `clear_thumbnail` still works (removing an image isn't an upload).
+
+### Added
+- `app/admin_center/main.py` — `_uploads_disabled()` helper mirroring `app.auth.uploads_disabled_in_demo` for the admin-center app.
+- `DEMO_DISABLE_UPLOADS` passthrough on the **admin-center** service in `docker-compose.yml` (the app service already had it; the ghcr compose has no admin-center service).
+- `tests/harness/test_demo_disable_uploads.py` — `test_all_upload_endpoints_carry_the_guard`: route-introspection over the main app asserting all 13 dependency-guarded upload endpoints (11 user-facing + 2 admin) list `require_uploads_enabled`, so a future upload endpoint that forgets the guard is caught in-process (no demo mode / HTTP needed).
+
+### Changed
+- `app/routes/admin_routes.py` — 2 admin upload handlers gain the guard dependency.
+- `app/routes/tabletop_routes.py` — `create_campaign` + `campaign_settings_save` skip the optional thumbnail save on a locked demo.
+- `docs/plans/demo-mode.md` — upload-lockdown note extended to cover the admin + thumbnail paths. `docs/test-harness-coverage.md` — test entry + total-count bump.
+
+---
+
 ## [2.1034.0] - 2026-07-31 — "The Velvet Rope"
 
 **Schema version:** 103

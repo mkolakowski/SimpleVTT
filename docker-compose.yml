@@ -170,6 +170,8 @@ services:
       # + base URL mirror the app service so the moved tools behave the same.
       ADMIN_CENTER_ADMIN_TOOLS: ${ADMIN_CENTER_ADMIN_TOOLS:-false}
       DEMO_MODE: ${DEMO_MODE:-false}
+      # Block the admin-center map upload when DEMO_MODE is also true (v2.1034.1).
+      DEMO_DISABLE_UPLOADS: ${DEMO_DISABLE_UPLOADS:-true}
       # v2.629.0 — testing override so the /backups page is fully functional
       # (settings / run / restore) even on a demo instance. Default false.
       DEMO_BACKUPS_ENABLED: ${DEMO_BACKUPS_ENABLED:-false}

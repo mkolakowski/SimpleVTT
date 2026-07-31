@@ -20,7 +20,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
 from ..admin_audit import record_admin_action
-from ..auth import require_admin
+from ..auth import require_admin, require_uploads_enabled
 from ..config import get_settings
 from ..database import get_db
 from ..game_systems import get_system, system_choices
@@ -251,7 +251,7 @@ async def admin_update_campaign_system(campaign_id: int, game_system: str = Form
 
 
 @router.post("/campaign/{campaign_id}/thumbnail")
-async def admin_upload_thumbnail(campaign_id: int, thumbnail: UploadFile = File(...), db: Session = Depends(get_db), user: User = Depends(require_admin)):
+async def admin_upload_thumbnail(campaign_id: int, thumbnail: UploadFile = File(...), db: Session = Depends(get_db), user: User = Depends(require_admin), _uploads_gate: None = Depends(require_uploads_enabled)):
     campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
     if not campaign:
         raise HTTPException(404)
@@ -303,6 +303,7 @@ async def admin_upload_map(
     image: UploadFile = File(None),
     db: Session = Depends(get_db),
     user: User = Depends(require_admin),
+    _uploads_gate: None = Depends(require_uploads_enabled),
 ):
     campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
     if not campaign:

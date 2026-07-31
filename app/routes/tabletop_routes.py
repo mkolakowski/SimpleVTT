@@ -31,7 +31,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 from sqlalchemy.orm import Session
 
 from .. import dice as dice_mod
-from ..auth import get_current_user, require_gm, require_uploads_enabled, require_user
+from ..auth import get_current_user, require_gm, require_uploads_enabled, require_user, uploads_disabled_in_demo
 from ..config import get_settings
 from ..database import SessionLocal, get_db
 from ..game_systems import SYSTEMS, get_system, system_choices
@@ -13732,7 +13732,10 @@ async def create_campaign(
     db.add(c)
     db.commit()
     db.refresh(c)
-    if thumbnail and thumbnail.filename:
+    # Skip the optional thumbnail upload on a locked-down public demo
+    # (v2.1034.1) — the campaign is still created, just without the image,
+    # so no file lands in the shared uploads volume. See require_uploads_enabled.
+    if thumbnail and thumbnail.filename and not uploads_disabled_in_demo():
         from ..routes.admin_routes import _save_thumbnail
         c.thumbnail_url = await _save_thumbnail(thumbnail)
         db.commit()
@@ -14362,7 +14365,10 @@ async def campaign_settings_save(
     campaign.auto_play_mode = "shuffle" if mode == "shuffle" else "order"
     if clear_thumbnail:
         campaign.thumbnail_url = None
-    if thumbnail and thumbnail.filename:
+    # Skip the optional thumbnail upload on a locked-down public demo
+    # (v2.1034.1); ``clear_thumbnail`` above still works (removing an image
+    # isn't an upload). See require_uploads_enabled.
+    if thumbnail and thumbnail.filename and not uploads_disabled_in_demo():
         from ..routes.admin_routes import _save_thumbnail
         campaign.thumbnail_url = await _save_thumbnail(thumbnail)
     raw_labels = [hp_threshold_0, hp_threshold_1, hp_threshold_2, hp_threshold_3, hp_threshold_4]

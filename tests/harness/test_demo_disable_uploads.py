@@ -82,6 +82,55 @@ def test_default_disable_uploads_is_true():
     assert Settings().demo_disable_uploads is True
 
 
+# The dedicated upload endpoints in the MAIN app that carry the guard as a
+# FastAPI dependency (v2.1034.0 user-facing + v2.1034.1 admin routes). Matched
+# by endpoint function name so the assertion is independent of route prefixes.
+# The admin-center map upload lives in a separate app and uses an inline
+# ``_uploads_disabled()`` check, so it's out of this introspection set.
+_GUARDED_UPLOAD_ENDPOINTS = {
+    "import_character",
+    "import_campaign",
+    "upload_token_image",
+    "upload_portrait",
+    "upload_template_image",
+    "settings_upload_map",
+    "settings_bulk_upload_maps",
+    "upload_encounter_background",
+    "set_campaign_background",
+    "upload_handout_image",
+    "upload_track",
+    "admin_upload_thumbnail",
+    "admin_upload_map",
+}
+
+
+def _direct_dependency_calls(route):
+    dependant = getattr(route, "dependant", None)
+    deps = getattr(dependant, "dependencies", None) or []
+    return {d.call for d in deps}
+
+
+def test_all_upload_endpoints_carry_the_guard():
+    """Route-introspection: every dedicated upload endpoint registered on the
+    main FastAPI app must list ``require_uploads_enabled`` among its
+    dependencies. Deterministic (no demo mode / HTTP needed) and catches a
+    future upload endpoint that forgets the guard, or an accidental removal."""
+    from app.main import app as main_app
+
+    guarded = {}
+    for route in main_app.routes:
+        name = getattr(getattr(route, "endpoint", None), "__name__", None)
+        if name in _GUARDED_UPLOAD_ENDPOINTS:
+            has_guard = require_uploads_enabled in _direct_dependency_calls(route)
+            # An endpoint name may resolve to a single route; OR-fold just in case.
+            guarded[name] = guarded.get(name, False) or has_guard
+
+    missing = _GUARDED_UPLOAD_ENDPOINTS - set(guarded)
+    assert not missing, f"upload endpoints not found on app.routes: {sorted(missing)}"
+    unguarded = sorted(n for n, ok in guarded.items() if not ok)
+    assert not unguarded, f"upload endpoints missing require_uploads_enabled: {unguarded}"
+
+
 # ─── Integration test: gate-off path on the live container ────────────
 
 # 1x1 transparent PNG — smallest valid image we can post through an
