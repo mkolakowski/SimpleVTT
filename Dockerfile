@@ -109,4 +109,4 @@ EXPOSE 8015
 # then `exec gosu appuser ...`. CMD is the uvicorn invocation; the
 # entrypoint forwards "$@" to gosu.
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port \"${APP_PORT:-8013}\" --proxy-headers"]
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port \"${APP_PORT:-8013}\" --proxy-headers --no-server-header"]

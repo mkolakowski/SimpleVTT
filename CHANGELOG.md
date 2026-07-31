@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1041.0] - 2026-07-31 — "The Loopback"
+
+**Schema version:** 103
+
+**Commit summary:** Compose hardening — bind the admin-center to 127.0.0.1 by default, forward the new security toggles to the app service so they're .env-tunable, and add `--no-server-header` to uvicorn.
+
+**Description:** Security hardening (audit follow-up, infra batch). Config-only.
+
+- **Admin-center bound to loopback.** The operator dashboard (privileged, default password) was published on `0.0.0.0:8015`. It now binds to `${ADMIN_CENTER_BIND:-127.0.0.1}` — loopback-only by default, reachable via SSH tunnel or `docker compose exec`, never the internet. Directly enforces the "don't expose 8015" intent. Set `ADMIN_CENTER_BIND=0.0.0.0` to deliberately expose it (behind your own auth/proxy). The app (8013) stays on `0.0.0.0` as intended.
+- **Security toggles forwarded to the app service.** The env vars added in v2.1035.0–v2.1040.2 worked by their code defaults but weren't reachable from `.env` (the app service uses an explicit `environment:` map, not `env_file`). Now forwarded in both `docker-compose.yml` and `docker-compose.ghcr.yml`: `APP_SECRET_KEY_STRICT`, `SECURITY_HEADERS_ENABLED`, `MAX_REQUEST_BODY_BYTES`, `CSRF_ORIGIN_CHECK_ENABLED`, `LOGIN_MAX_ATTEMPTS`, `LOGIN_WINDOW_SECONDS`, `MAX_IMPORT_UNCOMPRESSED_BYTES`, `MAX_BULK_UPLOAD_FILES`, `MAX_AUDIO_UPLOAD_FILES`. `CONTENT_SECURITY_POLICY` is deliberately **not** forwarded (a `${VAR:-}` empty default would omit the CSP; the code default applies — add it explicitly to customize).
+- **`--no-server-header`** on both uvicorn launches (Dockerfile app CMD + admin-center command) to stop leaking `server: uvicorn`.
+
+**Deliberately NOT changed:** the `DEMO_GM_SITE_ADMIN` compose default stays `true` — the harness/CI admin-portal tests depend on it, and this operator's `.env` already sets it `false` (the correct public-demo value). Flipping the default would break CI; the `.env.example` guidance already mandates `false` for public demos.
+
+### Added
+- `.env.example` — `ADMIN_CENTER_BIND` (default `127.0.0.1`).
+
+### Changed
+- `docker-compose.yml` — admin-center `ports` bind to `${ADMIN_CENTER_BIND:-127.0.0.1}`; app-service env forwards the 9 security toggles; `--no-server-header` on the admin-center command.
+- `docker-compose.ghcr.yml` — app-service env forwards the 9 security toggles.
+- `Dockerfile` — app CMD gains `--no-server-header`.
+
+---
+
 ## [2.1040.2] - 2026-07-31 — "The Members' Entrance"
 
 **Schema version:** 103

@@ -49,6 +49,19 @@ services:
       DEMO_CREDENTIALS_VISIBLE: ${DEMO_CREDENTIALS_VISIBLE:-true}
       # Block user file uploads when DEMO_MODE is also true (v2.1034.0).
       DEMO_DISABLE_UPLOADS: ${DEMO_DISABLE_UPLOADS:-true}
+      # Security hardening toggles (v2.1035.0–v2.1040.2). See .env.example.
+      # CONTENT_SECURITY_POLICY is intentionally NOT forwarded here: an empty
+      # value omits the CSP header, and `${VAR:-}` would send "" — the code
+      # default CSP applies instead. Add it explicitly only to customize.
+      APP_SECRET_KEY_STRICT: ${APP_SECRET_KEY_STRICT:-false}
+      SECURITY_HEADERS_ENABLED: ${SECURITY_HEADERS_ENABLED:-true}
+      MAX_REQUEST_BODY_BYTES: ${MAX_REQUEST_BODY_BYTES:-536870912}
+      CSRF_ORIGIN_CHECK_ENABLED: ${CSRF_ORIGIN_CHECK_ENABLED:-true}
+      LOGIN_MAX_ATTEMPTS: ${LOGIN_MAX_ATTEMPTS:-10}
+      LOGIN_WINDOW_SECONDS: ${LOGIN_WINDOW_SECONDS:-900}
+      MAX_IMPORT_UNCOMPRESSED_BYTES: ${MAX_IMPORT_UNCOMPRESSED_BYTES:-1073741824}
+      MAX_BULK_UPLOAD_FILES: ${MAX_BULK_UPLOAD_FILES:-100}
+      MAX_AUDIO_UPLOAD_FILES: ${MAX_AUDIO_UPLOAD_FILES:-50}
       # v2.776.0 — version-stamp display toggles.
       SHOW_VERSION: ${SHOW_VERSION:-true}
       VERSION_LINK_CHANGELOG: ${VERSION_LINK_CHANGELOG:-true}
@@ -269,11 +282,16 @@ services:
       # v2.977.0 — admin-center-owned store for demo self-test run history.
       - selftest_results:/data/selftest-results
     ports:
-      - "${ADMIN_CENTER_PORT:-8015}:${ADMIN_CENTER_PORT:-8015}"
+      # v2.1041.0 — bind the operator admin center to LOOPBACK only, not
+      # 0.0.0.0. It's a privileged dashboard with a default password; it must
+      # not be internet-reachable. Reach it via an SSH tunnel or `docker
+      # compose exec`. Override ADMIN_CENTER_BIND (e.g. to "0.0.0.0") only if
+      # you deliberately expose it behind your own auth/proxy.
+      - "${ADMIN_CENTER_BIND:-127.0.0.1}:${ADMIN_CENTER_PORT:-8015}:${ADMIN_CENTER_PORT:-8015}"
     command:
       - sh
       - -c
-      - uvicorn app.admin_center.main:app --host 0.0.0.0 --port "${ADMIN_CENTER_PORT:-8015}" --proxy-headers
+      - uvicorn app.admin_center.main:app --host 0.0.0.0 --port "${ADMIN_CENTER_PORT:-8015}" --proxy-headers --no-server-header
     healthcheck:
       test: ["CMD-SHELL", "python3 -c \"import urllib.request,os; urllib.request.urlopen('http://localhost:'+os.environ.get('ADMIN_CENTER_PORT','8015')+'/healthz').read()\" || exit 1"]
       interval: 15s
