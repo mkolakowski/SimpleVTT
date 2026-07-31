@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1037.0] - 2026-07-31 — "The Weigh Station"
+
+**Schema version:** 103
+
+**Commit summary:** Add a global request-body size limit (413 above a configurable cap, default 512 MiB) as a DoS backstop against multi-GB upload floods.
+
+**Description:** Security hardening (audit follow-up, DoS batch). The app had no global request-body limit, so a single multi-GB upload to any endpoint could exhaust memory/disk. This adds an outermost middleware (`_request_body_limit_mw`) that rejects a request whose declared `Content-Length` exceeds `MAX_REQUEST_BODY_BYTES` with `413` **before** the body is buffered. The default (512 MiB) is deliberately generous so legitimate bulk-map / video / audio uploads still pass; `0` disables it. The size check is a pure, unit-tested helper (`_request_body_too_large`).
+
+Caveat (documented in `.env.example`): this only bounds requests that declare a `Content-Length`; a hard cap for chunked bodies belongs at the edge proxy (Cloudflare/nginx), which should also be configured on a public deploy.
+
+### Added
+- `app/main.py` — `_request_body_too_large` helper + `_request_body_limit_mw` middleware + `MAX_REQUEST_BODY_BYTES` env read; import `JSONResponse` / `Optional`.
+- `.env.example` — documented "Request body size limit" section.
+- `tests/harness/test_request_body_limit.py` — 5 in-process unit tests: predicate under/over/missing/disabled + the resolved cap equals the env value or the 512 MiB default. (A live spoofed-`Content-Length` test was omitted — a declared length that mismatches the transferred body stalls the HTTP client.)
+
+---
+
 ## [2.1036.1] - 2026-07-31 — "The Straight Path"
 
 **Schema version:** 103

@@ -7,10 +7,11 @@ import re
 import time
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
+from typing import Optional
 
 from fastapi import FastAPI, Request
 from fastapi.exception_handlers import http_exception_handler
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.sessions import SessionMiddleware
@@ -160,6 +161,35 @@ async def _security_headers_mw(request: Request, call_next):
     if _COOKIE_SECURE:
         h.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
     return response
+
+
+# v2.1037.0 — request-body size limit (DoS backstop, security audit). Rejects a
+# request whose declared Content-Length exceeds the cap BEFORE the body is read
+# into memory, blunting multi-GB upload floods. Generous default (512 MB) so
+# legitimate bulk-map / video / audio uploads still pass; set 0 to disable, or
+# lower it (an edge proxy / Cloudflare should also cap). Registered OUTERMOST
+# (last) so it short-circuits before any other work. Note: only bounds requests
+# that declare Content-Length; a hard cap for chunked bodies belongs at the
+# reverse proxy.
+_MAX_REQUEST_BODY_BYTES = int(os.getenv("MAX_REQUEST_BODY_BYTES", str(512 * 1024 * 1024)) or 0)
+
+
+def _request_body_too_large(content_length: Optional[str], limit: int) -> bool:
+    """True when a declared Content-Length exceeds ``limit`` (limit<=0 or a
+    missing/unparseable header ⇒ allowed). Pure + unit-testable."""
+    if limit <= 0 or content_length is None:
+        return False
+    try:
+        return int(content_length) > limit
+    except (TypeError, ValueError):
+        return False
+
+
+@app.middleware("http")
+async def _request_body_limit_mw(request: Request, call_next):
+    if _request_body_too_large(request.headers.get("content-length"), _MAX_REQUEST_BODY_BYTES):
+        return JSONResponse({"detail": "Request body too large"}, status_code=413)
+    return await call_next(request)
 
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
