@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import Optional
 
 import markdown as md_lib
+import nh3
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
@@ -161,6 +162,13 @@ def _render_markdown_page(source: str, request: Request, fallback_title: str) ->
         source,
         extensions=["tables", "fenced_code", "sane_lists"],
     )
+    # v2.1042.0 — sanitize the rendered HTML (defense-in-depth). Python-Markdown
+    # passes embedded raw HTML through verbatim; nh3 (ammonia) strips <script>,
+    # event-handler attributes, and javascript:/data: URLs while keeping the
+    # doc structure (headings, tables, code, links). Wiki sources are currently
+    # server-controlled repo docs, but this makes the render path safe even if
+    # a doc ever incorporates user/campaign text.
+    rendered = nh3.clean(rendered)
     m = re.search(r"<h1[^>]*>(.*?)</h1>", rendered, re.IGNORECASE | re.DOTALL)
     title = re.sub(r"<[^>]+>", "", m.group(1)).strip() if m else fallback_title
     return templates.TemplateResponse("wiki_md.html", {

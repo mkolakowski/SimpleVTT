@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1042.0] - 2026-07-31 — "The Sieve"
+
+**Schema version:** 103
+
+**Commit summary:** Sanitize the wiki markdown→HTML render path with nh3 (ammonia) so embedded raw HTML can never become stored XSS.
+
+**Description:** Security hardening (audit follow-up, XSS batch). Python-Markdown passes embedded raw HTML through verbatim, and the app had no HTML sanitizer in its dependencies — so the wiki's `_render_markdown_page` emitted whatever HTML a doc contained. The sources are currently server-controlled repo docs (not attacker-writable), so this was a latent/defense-in-depth gap, but the pattern ("render markdown → raw HTML, unsanitized") is exactly what turns into stored XSS the moment any user/campaign text reaches it. Added `nh3==0.3.6` and pipe the rendered HTML through `nh3.clean` before it reaches the template: `<script>`, event-handler attributes, and `javascript:`/`data:` URLs are stripped while headings, tables, code blocks, and links are preserved. Scoped to the markdown path only — the standalone `docs/wiki/*.html` guides are author-controlled repo HTML and are left as-is.
+
+### Added
+- `requirements.txt` — `nh3==0.3.6` (Rust/ammonia HTML sanitizer).
+- `tests/harness/test_wiki_sanitize.py` — 2 unit tests (strips script/handlers/js-urls; preserves markdown structure tags). Route no-regression stays covered by `test_wiki.py`.
+
+### Changed
+- `app/routes/wiki_routes.py::_render_markdown_page` — `nh3.clean(rendered)` before templating.
+
+---
+
 ## [2.1041.1] - 2026-07-31 — "The Warded Menagerie"
 
 **Schema version:** 103
