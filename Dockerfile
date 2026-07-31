@@ -1,22 +1,49 @@
-# Multi-arch (works on amd64 + arm64) Python base
-FROM python:3.12-slim
+# Multi-arch (works on amd64 + arm64) Python base.
+#
+# v2.1042.1 — multi-stage build (security hardening). The build toolchain
+# (build-essential / libpq-dev) lives ONLY in the throwaway `builder` stage
+# where wheels are compiled; the final runtime image copies just the installed
+# packages, so the internet-facing container ships no compiler (no in-container
+# compilation for an attacker, smaller CVE surface). Chromium stays in the
+# runtime image because the shared image also runs the admin-center self-test;
+# splitting it into a separate admin-center-only image is a further step.
 
-# System deps
-# v2.474.0 — add `gosu` so the entrypoint can drop from root to
-# `appuser` after fixing volume permissions. gosu is a single-file
-# Go binary that does setuid+setgid+exec without PAM / TTY churn.
+# ---------- Stage 1: builder (has the compiler toolchain) ----------
+FROM python:3.12-slim AS builder
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
         build-essential \
         libpq-dev \
-        curl \
-        gosu \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Install Python deps first (better layer caching)
+# Install Python deps into the default /usr/local so we can copy the whole
+# tree into the runtime stage (identical base image → identical paths).
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+
+# ---------- Stage 2: runtime (no compiler toolchain) ----------
+FROM python:3.12-slim
+
+# Runtime system deps only:
+#   - gosu: the entrypoint drops from root to appuser after chowning volumes.
+#   - Chromium runtime libs + fonts: the Admin-Center self-test video capture.
+# NOTE: no build-essential / libpq-dev (psycopg2-binary bundles libpq) and no
+# curl (app + admin-center healthchecks use python3 urllib).
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        gosu \
+        libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 \
+        libdbus-1-3 libxkbcommon0 libatspi2.0-0 libxcomposite1 libxdamage1 \
+        libxfixes3 libxrandr2 libgbm1 libpango-1.0-0 libcairo2 libasound2 \
+        libxcb1 libx11-6 libx11-xcb1 libxext6 libxcb-shm0 fonts-liberation \
+    && rm -rf /var/lib/apt/lists/*
+
+# Bring in the Python packages compiled in the builder stage (site-packages +
+# console scripts like uvicorn / playwright). Same base image → same layout.
+COPY --from=builder /usr/local /usr/local
+
+WORKDIR /app
 
 # Copy application code
 COPY app /app/app
@@ -79,20 +106,12 @@ RUN groupadd --system appuser \
     && useradd --system --gid appuser --home /app --shell /sbin/nologin appuser \
     && chown -R appuser:appuser /app /var/log/simplevtt
 
-# v2.985.0 — install headless Chromium for the Admin-Center self-test video
-# capture. Installed to a shared path (not /root) + chowned so the unprivileged
-# appuser can launch it at runtime. We install the runtime libs by hand rather
-# than `playwright install --with-deps` because --with-deps maps to Ubuntu font
-# packages (ttf-unifont / ttf-ubuntu-font-family) that don't exist on the Debian
-# python:slim base.
+# v2.985.0 — headless Chromium for the Admin-Center self-test video capture.
+# Installed to a shared path (not /root) + chowned so the unprivileged appuser
+# can launch it at runtime. The runtime libs it needs are apt-installed above;
+# `playwright install chromium` only downloads the browser binary.
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
-RUN apt-get update && apt-get install -y --no-install-recommends \
-        libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 \
-        libdbus-1-3 libxkbcommon0 libatspi2.0-0 libxcomposite1 libxdamage1 \
-        libxfixes3 libxrandr2 libgbm1 libpango-1.0-0 libcairo2 libasound2 \
-        libxcb1 libx11-6 libx11-xcb1 libxext6 libxcb-shm0 fonts-liberation \
-    && rm -rf /var/lib/apt/lists/* \
-    && playwright install chromium \
+RUN playwright install chromium \
     && chown -R appuser:appuser /ms-playwright
 
 # Install the entrypoint that does chown-then-drop.

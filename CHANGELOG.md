@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1042.1] - 2026-07-31 — "The Clean Room"
+
+**Schema version:** 103
+
+**Commit summary:** Convert the Dockerfile to a multi-stage build so the internet-facing runtime image ships no compiler toolchain (build-essential / libpq-dev / curl removed).
+
+**Description:** Security hardening (audit follow-up, infra batch). The image installed `build-essential` + `libpq-dev` and never removed them, leaving `gcc`/`make` in the running web container — an attacker with a foothold got in-container compilation and a much larger CVE surface. Now a throwaway **builder** stage carries the toolchain and compiles the wheels; the **runtime** stage copies only the installed packages (`/usr/local`) and installs just the runtime deps it needs. `psycopg2-binary` bundles libpq (so no `libpq5` needed) and the app/admin-center healthchecks use `python3 urllib` (so no `curl`).
+
+Verified on a full rebuild: `gcc` / `make` / `curl` / `build-essential` are **absent** from the runtime image; `psycopg2` / `nh3` / `bcrypt` / `Pillow` / `playwright` all import; the DB connects; app + admin-center boot and the admin-center reports **healthy**; Chromium (`chromium-1134` + `ffmpeg`) is still present so the self-test video capture works. Image shrank ~300 MB.
+
+**Kept in the shared image (not yet split):** Chromium. The `app` and `admin-center` services build from this one image and only the admin-center self-test uses Chromium; moving it into a separate admin-center-only image (so the public app image drops it entirely) is a further step.
+
+### Changed
+- `Dockerfile` — two-stage `builder` → runtime; `build-essential`/`libpq-dev`/`curl` no longer in the runtime image. Non-root `appuser` + gosu drop, Chromium, entrypoint, and all doc COPYs unchanged.
+
+---
+
 ## [2.1042.0] - 2026-07-31 — "The Sieve"
 
 **Schema version:** 103
