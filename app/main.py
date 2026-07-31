@@ -192,6 +192,53 @@ async def _request_body_limit_mw(request: Request, call_next):
     return await call_next(request)
 
 
+# v2.1038.0 — CSRF origin check (defense-in-depth, security audit). SameSite=Lax
+# already blocks classic cross-site form POSTs; this adds an explicit
+# Origin/Referer host check so a cross-origin browser-driven state change is
+# rejected even if a cookie/SameSite regression ever slips. Header-less callers
+# (API/CLI/the harness) are allowed — they aren't driven by a victim's browser,
+# so they can't be a CSRF vector. GET /logout is covered too (an `<img
+# src=/logout>` logout-CSRF sends a cross-origin Referer). Mirrors the
+# admin-center's _csrf_origin_ok. Env-toggleable via CSRF_ORIGIN_CHECK_ENABLED.
+_CSRF_UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+_CSRF_ORIGIN_CHECK_ENABLED = os.getenv(
+    "CSRF_ORIGIN_CHECK_ENABLED", "true").strip().lower() in ("1", "true", "yes", "on")
+
+
+def _origin_matches_host(host: str, origin: Optional[str], referer: Optional[str]) -> bool:
+    """True when the request is safe from a CSRF standpoint: the first present
+    of Origin/Referer must have the same host as ``host``; a request with
+    neither header (non-browser client) is allowed. Pure + unit-testable."""
+    from urllib.parse import urlsplit
+    for val in (origin, referer):
+        if val:
+            return urlsplit(val).netloc == host
+    return True
+
+
+def _csrf_origin_ok(request: Request) -> bool:
+    return _origin_matches_host(
+        request.headers.get("host", ""),
+        request.headers.get("origin"),
+        request.headers.get("referer"),
+    )
+
+
+@app.middleware("http")
+async def _csrf_mw(request: Request, call_next):
+    if _CSRF_ORIGIN_CHECK_ENABLED:
+        method = request.method
+        guarded = method in _CSRF_UNSAFE_METHODS or (
+            method == "GET" and request.url.path == "/logout"
+        )
+        if guarded and not _csrf_origin_ok(request):
+            return JSONResponse(
+                {"detail": "CSRF check failed: cross-origin request rejected."},
+                status_code=403,
+            )
+    return await call_next(request)
+
+
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 STATIC_DIR.mkdir(exist_ok=True)
 (STATIC_DIR / "uploads" / "maps").mkdir(parents=True, exist_ok=True)

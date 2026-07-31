@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1038.0] - 2026-07-31 — "The Bouncer"
+
+**Schema version:** 103
+
+**Commit summary:** Add a CSRF Origin/Referer check to the main app (mirroring the admin-center's), rejecting cross-origin state-changing requests — and GET /logout — as defense-in-depth on top of SameSite=Lax.
+
+**Description:** Security hardening (audit follow-up, CSRF batch). The main app relied solely on the `SameSite=Lax` session cookie for CSRF protection. This ports the admin-center's `_csrf_origin_ok` pattern to a main-app middleware (`_csrf_mw`): a state-changing request (`POST`/`PUT`/`PATCH`/`DELETE`) — plus `GET /logout` — whose `Origin`/`Referer` host doesn't match the app's `Host` is rejected with `403`. Header-less callers (API/CLI/the harness) are allowed, since a request with no `Origin`/`Referer` isn't browser-driven and can't be a CSRF vector, so no existing programmatic client breaks.
+
+`GET /logout` is covered without converting it to a POST (which would have meant form-ifying the `<a href="/logout">` links in three templates): a legitimate same-origin Logout click sends a matching `Referer`, while a cross-origin `<img src="/logout">` logout-CSRF sends a foreign one and is rejected. The core host-compare is a pure, unit-tested helper (`_origin_matches_host`); the feature is env-toggleable via `CSRF_ORIGIN_CHECK_ENABLED` (default on).
+
+### Added
+- `app/main.py` — `_origin_matches_host` helper + `_csrf_origin_ok` + `_csrf_mw` middleware + `CSRF_ORIGIN_CHECK_ENABLED` env read.
+- `.env.example` — documented "CSRF origin check" section.
+- `tests/harness/test_csrf_origin.py` — 7 tests: 5 predicate unit tests (match / mismatch / referer-fallback / origin-precedence / no-headers) + 2 live integration tests (cross-origin POST → 403 CSRF; header-less POST not CSRF-blocked).
+
+---
+
 ## [2.1037.0] - 2026-07-31 — "The Weigh Station"
 
 **Schema version:** 103
