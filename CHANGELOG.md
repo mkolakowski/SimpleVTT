@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1042.4] - 2026-08-01 — "The Whetstone"
+
+**Schema version:** 103
+
+**Commit summary:** Land the Battle Master Phase 2 harness test — assert the superiority-dice pool refills on a short rest (and a long rest) — and mark the plan phase shipped.
+
+**Description:** Test coverage (backlog easy win). The Battle Master maneuvers shipped end-to-end (v2.99.x), and the superiority-dice pool refill already works via the generic reset-kind path in `/rest` (`rest_character`: a short rest refills `reset: "short"` resources; a long rest refills short + long). But that refill contract had **no harness test** — the last open item in `docs/plans/battle-master.md` Phase 2. This adds it: flip the demo Fighter (Garrik) to Battle Master with a curated `superiority-dice` resource (`reset: "short"`), deplete it, and assert a short rest brings 1/4 → 4/4 and a long rest brings 0/4 → 4/4. No product code — pure verification of an existing contract, plus documenting that curated content must set `reset: "short"` for the pool to refill correctly.
+
+### Added
+- `tests/harness/test_battle_master_rest_refill.py` — 2 tests (short-rest refill, long-rest refill of the superiority-dice pool).
+
+### Changed
+- `docs/plans/battle-master.md` — Phase 2 marked ✅ shipped with the test reference.
+
+---
+
 ## [2.1042.3] - 2026-08-01 — "The Steady Hand"
 
 **Schema version:** 103

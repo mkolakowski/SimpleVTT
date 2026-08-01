@@ -73,13 +73,19 @@ does not yet take a `maneuver: "trip"` body field.
 **Test:** happy path at Lv 3 d8; out-of-dice 409; wrong subclass
 409; level gate 409.
 
-### Phase 2 — Pool refill on short/long rest (⚪ partial — short-rest TBD)
+### Phase 2 — Pool refill on short/long rest (✅ shipped in v2.1042.4)
 
-Long-rest refill already happens via the generic
-`resources[*].reset == "short"` path in `/rest` because the
-demo's `superiority-dice` resource is curated with
-`reset: "short"`. Phase 2 ships the per-rest refill check in a
-harness test + documents the `reset: "short"` requirement.
+Refill happens via the generic reset-kind path in `/rest`
+(`rest_character`): a **short** rest refills `reset: "short"`
+resources, and a **long** rest refills short + long. The demo's
+`superiority-dice` resource is curated with `reset: "short"`, so it
+comes back on a short rest — the RAW Battle Master contract. The
+**`reset: "short"` requirement** is the single thing curated content
+must get right for the pool to refill correctly.
+
+Covered by `tests/harness/test_battle_master_rest_refill.py`
+(v2.1042.4 "The Whetstone"): deplete Garrik's Battle Master pool, then
+assert a short rest refills 1/4 → 4/4 and a long rest refills 0/4 → 4/4.
 
 ### Phase 3 — Maneuvers (⚪ deferred, batched)
 
