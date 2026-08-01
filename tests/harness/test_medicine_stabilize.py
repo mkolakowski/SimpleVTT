@@ -59,6 +59,14 @@ async def _restore(gm_client, char_id):
     )
 
 
+async def _set_roll_state(gm_client, char_id, value):
+    """Set (or clear, value=None) a character's advantage/disadvantage."""
+    await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{char_id}/roll-state",
+        json={"value": value},
+    )
+
+
 async def test_medicine_stabilize_409_when_target_not_dying(
     gm_client, roster,
 ):
@@ -231,3 +239,61 @@ async def test_medicine_stabilize_failure_when_modifier_low(
                 "skills": orig_skills,
             },
         )
+
+
+async def _stabilize_with_roll_state(gm_client, roster, value, expect_token, expect_applied):
+    """v2.1042.3 — shared body for the adv/dis ride-through tests. Boosts the
+    healer's WIS to 30 (guaranteed to clear DC 10 even on the low die), sets
+    the healer's roll_state, and asserts the Medicine d20 was upgraded."""
+    tavik = roster["Brother Tavik Stonebrow"]
+    pip = roster["Pip Quickfingers"]
+    snap = await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{tavik['id']}/sheet-json",
+    )
+    sheet = (snap.json() or {}).get("sheet") or {}
+    orig_wis = (sheet.get("abilities") or {}).get("WIS")
+    orig_skills = sheet.get("skills") or {}
+    try:
+        new_skills = dict(orig_skills)
+        new_skills["Medicine"] = {**(orig_skills.get("Medicine") or {}), "proficient": True}
+        await gm_client.patch(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{tavik['id']}/sheet-fields",
+            json={"abilities": {**(sheet.get("abilities") or {}), "WIS": 30}, "skills": new_skills},
+        )
+        await _set_roll_state(gm_client, tavik["id"], value)
+        await _drop_to_dying(gm_client, pip["id"])
+        r = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{tavik['id']}/medicine_stabilize",
+            json={"target_char_id": pip["id"]},
+        )
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert data["roll_state"] == expect_applied, (
+            f"expected roll_state={expect_applied}; got {data.get('roll_state')} ({data})"
+        )
+        assert expect_token in (data.get("roll_breakdown") or ""), (
+            f"expected the d20 upgraded to {expect_token}; breakdown={data.get('roll_breakdown')!r}"
+        )
+    finally:
+        await _set_roll_state(gm_client, tavik["id"], None)
+        await _restore(gm_client, pip["id"])
+        await gm_client.patch(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{tavik['id']}/sheet-fields",
+            json={
+                "abilities": {**(sheet.get("abilities") or {}), "WIS": orig_wis or 14},
+                "skills": orig_skills,
+            },
+        )
+
+
+async def test_medicine_stabilize_rides_healer_advantage(gm_client, roster):
+    """v2.1042.3 — the healer's ADVANTAGE roll_state upgrades the Medicine
+    d20 to 2d20kh1; response `roll_state` reports auto_advantage."""
+    await _stabilize_with_roll_state(gm_client, roster, "advantage", "2d20kh1", "auto_advantage")
+
+
+async def test_medicine_stabilize_rides_healer_disadvantage(gm_client, roster):
+    """v2.1042.3 — the healer's DISADVANTAGE roll_state upgrades the Medicine
+    d20 to 2d20kl1; response `roll_state` reports auto_disadvantage. WIS 30
+    still clears DC 10 on the low die, so the endpoint stays 200."""
+    await _stabilize_with_roll_state(gm_client, roster, "disadvantage", "2d20kl1", "auto_disadvantage")

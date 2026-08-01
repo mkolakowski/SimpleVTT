@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1042.3] - 2026-08-01 — "The Steady Hand"
+
+**Schema version:** 103
+
+**Commit summary:** Make the Medicine-check stabilize (`/medicine_stabilize`) honor the healer's advantage/disadvantage roll_state instead of rolling a flat 1d20 — closing the filed death-saves Phase 3b follow-up.
+
+**Description:** Correctness fix (backlog easy win). `medicine_stabilize` (Death Saves Phase 3b, v2.151.0) rolled a flat `1d20 + mod` and ignored the healer's `roll_state`, even though its own docstring claimed advantage "rides through naturally" (it didn't). Every other d20 roll in the app upgrades via `_apply_roll_state`; this now does too — a healer with advantage rolls `2d20kh1`, disadvantage rolls `2d20kl1`, and the applied state is surfaced as a new additive `roll_state` field on the JSON response and both the `character_death_save` (success) and `feature_used` (failure) broadcasts, so the chat card can attribute it. Manual `2d20kh1`/`1d20a` forms are respected (tagged `manual_*`); no roll_state → unchanged `1d20`. This matches `docs/plans/death-saves.md:16`'s "clean follow-up" note.
+
+### Changed
+- `app/routes/tabletop_routes.py::medicine_stabilize` — apply `_apply_roll_state(expr, healer roll_state)`; add the additive `roll_state` field to the response + both broadcasts; docstring corrected.
+
+### Added
+- `tests/harness/test_medicine_stabilize.py` (+2 → 5) — advantage rides through (`2d20kh1` / `auto_advantage`) and disadvantage rides through (`2d20kl1` / `auto_disadvantage`), both via a WIS-30 deterministic-pass helper.
+
+---
+
 ## [2.1042.2] - 2026-07-31 — "The Annex"
 
 **Schema version:** 103

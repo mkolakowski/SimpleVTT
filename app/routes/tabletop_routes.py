@@ -125208,9 +125208,10 @@ async def medicine_stabilize(
     attribute the stabilize source.
 
     v1 simplification: no range check between healer and target (RAW
-    requires adjacency — GM adjudicates). The Medicine check uses the
-    standard skill check pipeline; advantage/disadvantage from the
-    healer's `roll_state` rides through naturally.
+    requires adjacency — GM adjudicates). Advantage/disadvantage from the
+    healer's `roll_state` is applied to the d20 via ``_apply_roll_state``
+    (v2.1042.3), and the applied state is surfaced as ``roll_state`` on the
+    response + broadcast.
     """
     body = await request.json()
     try:
@@ -125259,9 +125260,15 @@ async def medicine_stabilize(
     is_proficient = bool(med_entry.get("proficient"))
     medicine_mod = wis_mod + (pb if is_proficient else 0)
 
-    # Roll 1d20 + modifier through the existing dice helper.
+    # Roll 1d20 + modifier through the existing dice helper, honoring the
+    # healer's advantage/disadvantage roll_state (v2.1042.3 — death-saves
+    # Phase 3b follow-up: a flat 1d20 previously ignored roll_state, despite
+    # the docstring claiming it rode through). ``_apply_roll_state`` upgrades
+    # the single-d20 expression to 2d20kh1 / 2d20kl1 when the healer's stored
+    # roll_state.value is advantage / disadvantage.
     mod_str = f"+{medicine_mod}" if medicine_mod >= 0 else str(medicine_mod)
     expr = f"1d20{mod_str}"
+    expr, roll_state_applied = _apply_roll_state(expr, healer_sheet.get("roll_state"))
     try:
         r = dice_mod.roll(expr)
         roll_total = int(r.total)
@@ -125269,6 +125276,7 @@ async def medicine_stabilize(
     except dice_mod.DiceParseError:
         roll_total = 0
         roll_breakdown = ""
+        roll_state_applied = ""
     dc = 10
     passed = roll_total >= dc
 
@@ -125291,6 +125299,7 @@ async def medicine_stabilize(
                 "healer_char_name": healer.name,
                 "roll_total": roll_total,
                 "roll_breakdown": roll_breakdown,
+                "roll_state": roll_state_applied,
                 "dc": dc,
             },
         })
@@ -125314,6 +125323,7 @@ async def medicine_stabilize(
                 "target_char_name": target.name,
                 "roll_total": roll_total,
                 "roll_breakdown": roll_breakdown,
+                "roll_state": roll_state_applied,
                 "dc": dc,
             },
         })
@@ -125323,6 +125333,7 @@ async def medicine_stabilize(
         "passed": passed,
         "roll_total": roll_total,
         "roll_breakdown": roll_breakdown,
+        "roll_state": roll_state_applied,
         "medicine_modifier": medicine_mod,
         "dc": dc,
         "target_char_id": target.id,
