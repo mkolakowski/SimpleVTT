@@ -126682,6 +126682,32 @@ async def settings_rename_map(
     return {"ok": True, "name": m.name}
 
 
+@router.post("/campaign/{campaign_id}/settings/maps/{map_id}/use-as-thumbnail")
+async def settings_map_as_thumbnail(
+    campaign_id: int,
+    map_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.1043.0 — reuse a map's existing image as the campaign thumbnail so a
+    GM doesn't have to upload the same picture twice. GM-only. Points
+    ``campaign.thumbnail_url`` at the map's already-uploaded ``image_url`` — no
+    file copy, the same static asset is shared. Not an upload endpoint (it
+    references an existing file), so it works even when ``DEMO_DISABLE_UPLOADS``
+    is on. Returns the new thumbnail URL."""
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+    m = db.query(Map).filter(Map.id == map_id, Map.campaign_id == campaign_id).first()
+    if not m:
+        raise HTTPException(404)
+    if not (m.image_url or "").strip():
+        raise HTTPException(400, "This map has no image to use as a thumbnail")
+    campaign.thumbnail_url = m.image_url
+    db.commit()
+    return {"ok": True, "thumbnail_url": campaign.thumbnail_url, "map_id": m.id}
+
+
 @router.post("/campaign/{campaign_id}/settings/maps/{map_id}/grid_size")
 async def settings_map_grid_size(
     campaign_id: int,

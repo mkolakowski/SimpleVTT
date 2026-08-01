@@ -148,13 +148,18 @@
         <p class="muted" style="margin:0;">Changing the game system affects new characters only — existing sheets keep their original template.</p>
         <fieldset>
             <legend>Thumbnail</legend>
+            <div id="thumb-preview-area">
             {% if campaign.thumbnail_url %}
-            <p><img src="{{ campaign.thumbnail_url }}" alt="thumbnail" style="max-width:200px;border-radius:6px;"></p>
-            <label><input type="checkbox" name="clear_thumbnail" value="true"> Remove current thumbnail</label>
+                <p><img src="{{ campaign.thumbnail_url }}" alt="thumbnail" style="max-width:200px;border-radius:6px;"></p>
+                <label><input type="checkbox" name="clear_thumbnail" value="true"> Remove current thumbnail</label>
             {% else %}
-            <p class="muted">No thumbnail set.</p>
+                <p class="muted">No thumbnail set.</p>
             {% endif %}
+            </div>
             <label>Upload new (png/jpg/webp, max 5 MB) <input type="file" name="thumbnail" accept="image/*"></label>
+            {# v2.1043.0 — reuse an existing map image instead of uploading twice. #}
+            <p class="muted" style="margin:4px 0 0;">Tip: use the “🖼 As thumbnail” button on any map in the Maps section below to reuse its image as the campaign thumbnail — no re-upload needed.</p>
+            <p id="thumb-status" class="muted" role="status" aria-live="polite" style="margin:4px 0 0;"></p>
         </fieldset>
         <label style="flex-direction:row;align-items:center;gap:10px;">
             GM Tools tab color
@@ -592,6 +597,11 @@
                         <button type="submit">Activate</button>
                     </form>
                     {% endif %}
+                    {# v2.1043.0 — reuse this map's image as the campaign thumbnail (no re-upload). #}
+                    {% if m.image_url %}
+                    <button type="button" data-map-id="{{ m.id }}" data-map-name="{{ m.name }}"
+                            onclick="useMapAsThumbnail(this)" title="Use this map's image as the campaign thumbnail">🖼 As thumbnail</button>
+                    {% endif %}
                     <form method="post" action="/campaign/{{ campaign.id }}/settings/maps/{{ m.id }}/delete" style="display:inline;" onsubmit="return confirm('Delete map {{ m.name }}?')">
                         <button type="submit" class="danger">Delete</button>
                     </form>
@@ -605,6 +615,46 @@
     {% else %}
     <p class="muted">No maps yet.</p>
     {% endif %}
+    <script>
+    // v2.1043.0 — reuse a map's already-uploaded image as the campaign
+    // thumbnail (no second upload). Global so the per-map row's inline
+    // onclick can reach it.
+    async function useMapAsThumbnail(btn) {
+        const mapId = btn.dataset.mapId;
+        const mapName = btn.dataset.mapName || 'map';
+        const status = document.getElementById('thumb-status');
+        const setStatus = (msg, ok) => {
+            if (status) { status.textContent = msg; status.style.color = ok ? '' : '#c66'; }
+        };
+        btn.disabled = true;
+        try {
+            const resp = await fetch(
+                `/campaign/{{ campaign.id }}/settings/maps/${mapId}/use-as-thumbnail`,
+                { method: 'POST', headers: { 'Content-Type': 'application/json' } },
+            );
+            let data = {};
+            try { data = await resp.json(); } catch (e) { /* non-JSON error */ }
+            if (!resp.ok) { setStatus(data.detail || 'Could not set the thumbnail.', false); return; }
+            const area = document.getElementById('thumb-preview-area');
+            if (area && data.thumbnail_url) {
+                const img = document.createElement('img');
+                img.src = data.thumbnail_url;      // server static path — set via property
+                img.alt = 'thumbnail';
+                img.style.cssText = 'max-width:200px;border-radius:6px;';
+                const p = document.createElement('p');
+                p.appendChild(img);
+                const lbl = document.createElement('label');
+                lbl.innerHTML = '<input type="checkbox" name="clear_thumbnail" value="true"> Remove current thumbnail';
+                area.replaceChildren(p, lbl);
+            }
+            setStatus(`Campaign thumbnail set to “${mapName}”.`, true);  // mapName via textContent
+        } catch (e) {
+            setStatus('Network error setting the thumbnail.', false);
+        } finally {
+            btn.disabled = false;
+        }
+    }
+    </script>
     {# Shared autocomplete datasets #}
     <datalist id="map-tag-list">
         {% set _seen = [] %}

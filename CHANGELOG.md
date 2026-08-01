@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1043.0] - 2026-08-01 — "Double Duty"
+
+**Schema version:** 103
+
+**Commit summary:** Add a GM "🖼 As thumbnail" action on each map in campaign settings that reuses the map's existing image as the campaign thumbnail — no second upload.
+
+**Description:** Feature (user request). Previously a GM who wanted a map image as the campaign thumbnail had to upload the same file twice. This adds `POST /campaign/{cid}/settings/maps/{map_id}/use-as-thumbnail` (GM-only), which points `campaign.thumbnail_url` at the map's already-uploaded `image_url` — no file copy, the same static asset is shared. Each map row in the Maps section of GM settings gains a **🖼 As thumbnail** button (shown only when the map has an image); clicking it sets the thumbnail via a JSON fetch and updates the Thumbnail preview in place, with a status line.
+
+Because it references a file already on disk rather than accepting an upload, the endpoint deliberately does **not** carry the `require_uploads_enabled` gate — a GM can reuse a seeded map as the thumbnail even on a locked-down demo (`DEMO_DISABLE_UPLOADS=true`).
+
+### Added
+- `app/routes/tabletop_routes.py::settings_map_as_thumbnail` — `POST .../settings/maps/{map_id}/use-as-thumbnail`, GM-gated + map-scoped, returns `{ok, thumbnail_url, map_id}`; 404 unknown map, 400 map with no image.
+- `app/templates/campaign_settings.html` — per-map "🖼 As thumbnail" button + a global `useMapAsThumbnail` handler that updates the thumbnail preview (DOM-built, map name via `textContent`); the Thumbnail fieldset gains a preview container + tip + status line.
+- `tests/harness/test_map_as_thumbnail.py` — 3 tests: happy path (200 + static URL + persisted on the settings page), unknown map → 404, non-GM → 403.
+
+---
+
 ## [2.1042.4] - 2026-08-01 — "The Whetstone"
 
 **Schema version:** 103
