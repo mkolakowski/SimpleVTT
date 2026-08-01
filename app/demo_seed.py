@@ -8811,6 +8811,32 @@ def reset_and_reseed(db: Session) -> dict[str, int]:
     extra_campaigns = demo_campaigns.seed_leveled_campaigns(db, users)
     db.commit()
 
+    # v2.1043.1 — give every demo campaign a lobby thumbnail from its active
+    # (or first) map's image, so the campaign cards show the actual battle map
+    # instead of a blank placeholder. No file copy — the campaign's
+    # thumbnail_url just points at the map's already-served image_url, the same
+    # reuse the "🖼 As thumbnail" GM-settings button does (v2.1043.0). Runs as a
+    # uniform post-pass so every leveled campaign is covered without editing
+    # each seeder.
+    thumbs_set = 0
+    for c in db.query(Campaign).all():
+        if c.thumbnail_url:
+            continue
+        mp = None
+        if c.active_map_id:
+            mp = db.query(Map).filter(Map.id == c.active_map_id).first()
+        if mp is None or not mp.image_url:
+            mp = (
+                db.query(Map)
+                .filter(Map.campaign_id == c.id, Map.image_url.isnot(None))
+                .order_by(Map.id)
+                .first()
+            )
+        if mp and mp.image_url:
+            c.thumbnail_url = mp.image_url
+            thumbs_set += 1
+    db.commit()
+
     counts = {
         "users":           len(users),
         "campaign":        1 + len(extra_campaigns),
@@ -8823,6 +8849,7 @@ def reset_and_reseed(db: Session) -> dict[str, int]:
         "roll_history":    rolls,
         "homebrew_files":  homebrew_count,
         "leveled_campaigns": len(extra_campaigns),
+        "campaign_thumbnails": thumbs_set,
     }
     log.info("demo reset complete: %s", counts)
     return counts

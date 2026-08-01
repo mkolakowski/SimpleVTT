@@ -10,6 +10,19 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1043.1] - 2026-08-01 — "The Cover Art"
+
+**Schema version:** 103
+
+**Commit summary:** Give every demo campaign a lobby thumbnail from its map image, showcasing the new "map as thumbnail" reuse.
+
+**Description:** Demo content (user request, pairs with v2.1043.0). The demo campaigns seeded with no `thumbnail_url`, so their lobby cards showed a blank placeholder. `reset_and_reseed` now runs a uniform post-pass after all campaigns (the Sundered Tavern + the leveled L3/L5/L9/L13/L18 lineup) are seeded: each campaign without a thumbnail gets one from its **active** map's image (falling back to its first image-bearing map). It's the same non-copying reuse the "🖼 As thumbnail" GM-settings button does — the campaign's `thumbnail_url` just points at the map's already-served `image_url`. A `campaign_thumbnails` count is added to the reset summary log. Takes effect on the next demo reseed (on boot / interval).
+
+### Changed
+- `app/demo_seed.py::reset_and_reseed` — post-pass sets each demo campaign's `thumbnail_url` from its active/first map image; `campaign_thumbnails` added to the counts summary.
+
+---
+
 ## [2.1043.0] - 2026-08-01 — "Double Duty"
 
 **Schema version:** 103
