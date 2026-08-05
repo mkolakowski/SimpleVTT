@@ -245,6 +245,19 @@ STATIC_DIR.mkdir(exist_ok=True)
 (STATIC_DIR / "uploads" / "tokens").mkdir(parents=True, exist_ok=True)
 (STATIC_DIR / "uploads" / "thumbnails").mkdir(parents=True, exist_ok=True)
 (STATIC_DIR / "uploads" / "audio").mkdir(parents=True, exist_ok=True)
+# v2.1046.0 — handout media (images + PDF documents) is authorization-gated
+# rather than served as public static bytes. Starlette matches routes in
+# registration order, so this MUST be registered before the /static mount
+# below or the mount swallows it. Only this one prefix is intercepted;
+# every other /static path is served by StaticFiles as before. See the
+# block comment above ``serve_handout_media`` for the design rationale.
+app.add_api_route(
+    "/static/uploads/handouts/{filename:path}",
+    notes_routes.serve_handout_media,
+    methods=["GET", "HEAD"],
+    include_in_schema=False,
+    name="handout_media",
+)
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 register_oauth(settings)

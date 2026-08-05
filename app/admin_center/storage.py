@@ -195,6 +195,10 @@ def _build_index(db):
         _add(e.background_url, campaign_id=e.campaign_id)
     for h in db.query(Handout).all():
         _add(h.image_url, campaign_id=h.campaign_id)
+        # v2.1046.0 — document attachments (v2.1045.0) share the handouts
+        # subdir; without this they walked as "unattributed" bytes and
+        # escaped per-campaign quota enforcement.
+        _add(getattr(h, "file_url", None), campaign_id=h.campaign_id)
     # Audio → via playlist → campaign.
     playlist_campaign = {p.id: p.campaign_id for p in db.query(Playlist).all()}
     for tr in db.query(PlaylistTrack).all():

@@ -20,13 +20,16 @@ every ``gm_note``; a non-GM sees nothing yet), and writes to a
 """
 from __future__ import annotations
 
+import re
 import uuid
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from ..auth import require_uploads_enabled, require_user
+from ..auth import get_current_user, require_uploads_enabled, require_user
 from ..database import get_db
 from ..models import (
     Campaign,
@@ -56,6 +59,22 @@ _ALLOWED_HANDOUT_IMG_EXT = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
 # storage quota get eaten by one upload.
 _MAX_HANDOUT_DOC_BYTES = 25 * 1024 * 1024
 _ALLOWED_HANDOUT_DOC_EXT = {".pdf"}
+
+# Handout media filenames (v2.1046.0). Server-generated as
+# ``c<campaign_id>-<uuid>.<ext>``. The campaign prefix is what lets the
+# access gate below authorize a file that is not yet attached to any
+# handout — the GM has uploaded it but hasn't saved the composer yet, so
+# there is no ``revealed`` flag to consult. Legacy files (pre-v2.1046.0,
+# a bare ``<uuid>.<ext>``) have no prefix and are authorized purely
+# through the handout that references them.
+_HANDOUT_MEDIA_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9.-]*$")
+_HANDOUT_MEDIA_CAMPAIGN_RE = re.compile(r"^c(\d+)-")
+_HANDOUT_MEDIA_URL_PREFIX = "/static/uploads/handouts/"
+
+
+def _handout_media_name(campaign_id: int, ext: str) -> str:
+    return f"c{int(campaign_id)}-{uuid.uuid4().hex}{ext}"
+
 
 _MAX_TITLE = 200
 _MAX_BODY = 50_000
@@ -696,9 +715,9 @@ async def upload_handout_image(
     _q = check_quota(db, campaign_id, len(data))
     if _q:
         raise HTTPException(413, _q)
-    fname = uuid.uuid4().hex + ext
+    fname = _handout_media_name(campaign_id, ext)
     (_HANDOUT_IMG_DIR / fname).write_bytes(data)
-    return {"ok": True, "image_url": "/static/uploads/handouts/" + fname}
+    return {"ok": True, "image_url": _HANDOUT_MEDIA_URL_PREFIX + fname}
 
 
 @router.post("/api/campaign/{campaign_id}/handouts/upload_file")
@@ -741,14 +760,140 @@ async def upload_handout_file(
     _q = check_quota(db, campaign_id, len(data))
     if _q:
         raise HTTPException(413, _q)
-    fname = uuid.uuid4().hex + ext
+    fname = _handout_media_name(campaign_id, ext)
     (_HANDOUT_IMG_DIR / fname).write_bytes(data)
     return {
         "ok": True,
-        "file_url": "/static/uploads/handouts/" + fname,
+        "file_url": _HANDOUT_MEDIA_URL_PREFIX + fname,
         "file_name": original[:255],
         "file_size": len(data),
     }
+
+
+# ───────────── Handout media access gate (v2.1046.0) ─────────────
+#
+# Handout images and documents live on the uploads volume under
+# ``/static/uploads/handouts/``, which the ``/static`` mount would
+# otherwise serve to anyone with the URL. Until v2.1046.0 the reveal
+# gate therefore controlled *distribution of the URL*, not the bytes: a
+# URL that leaked (browser history, a shared screenshot, a proxy log)
+# read the secret handout forever, and a player who had legitimately
+# seen a handout kept access after the GM hid it again.
+#
+# ``serve_handout_media`` closes that. It is registered directly on the
+# app **before** the ``/static`` mount (see ``app/main.py``) so it wins
+# the route match on this one prefix; every other ``/static`` path is
+# untouched. Keeping the URL shape identical is deliberate — the bytes
+# stay on the ``uploads_data`` volume (so backups and the admin-center
+# storage accounting, which walks that volume and indexes by basename,
+# keep working unchanged), every stored ``image_url`` / ``file_url``
+# stays valid, and no migration or client change is needed. Every
+# pre-existing handout is retroactively protected.
+#
+# Authorization has two cases:
+#   1. The file is referenced by a handout → the requester must be a
+#      member of that campaign AND pass ``_can_see_handout`` (the same
+#      single gate the list/get paths use). Hiding a handout revokes
+#      access to its media immediately.
+#   2. The file is referenced by no handout — the GM uploaded it but
+#      hasn't saved the composer yet (or the handout was deleted). There
+#      is no reveal flag to consult, so authorization falls back to the
+#      campaign id encoded in the filename: GM/co-GM of that campaign
+#      only. Legacy files (no ``c<id>-`` prefix) have no fallback and
+#      are unreachable once unreferenced, which is the safe direction.
+#
+# Every failure is a flat 404 — a 401/403 would confirm that a given
+# handout's media exists, which is exactly what an un-revealed handout
+# must not disclose.
+
+
+def _handout_media_campaign_id(filename: str) -> "int | None":
+    m = _HANDOUT_MEDIA_CAMPAIGN_RE.match(filename)
+    return int(m.group(1)) if m else None
+
+
+def _handout_referencing(db: Session, filename: str) -> "Handout | None":
+    """The handout whose image or document is ``filename``, if any.
+
+    The LIKE is only a prefilter — ``_`` is a LIKE wildcard, so it can
+    over-match (never under-match). The exact basename comparison in
+    Python is what actually decides, so a crafted name can't borrow
+    another handout's permissions.
+    """
+    needle = _HANDOUT_MEDIA_URL_PREFIX + filename
+    rows = (
+        db.query(Handout)
+        .filter(or_(Handout.image_url.like(f"%{needle}"),
+                    Handout.file_url.like(f"%{needle}")))
+        .all()
+    )
+    for h in rows:
+        for url in (h.image_url, h.file_url):
+            if url and url.rsplit("/", 1)[-1] == filename:
+                return h
+    return None
+
+
+async def serve_handout_media(
+    filename: str,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Serve a handout image/document, gated by the handout's reveal
+    rules. Registered ahead of the ``/static`` mount; see the block
+    comment above for why this shape was chosen."""
+    not_found = HTTPException(404, "Not found")
+    # ``{filename:path}`` is used at registration so a nested path can't
+    # slip past this handler to the static mount; anything with a
+    # separator, a traversal segment, or a leading dot is rejected here.
+    if "/" in filename or "\\" in filename:
+        raise not_found
+    if not _HANDOUT_MEDIA_NAME_RE.match(filename):
+        raise not_found
+    path = _HANDOUT_IMG_DIR / filename
+    if not path.is_file():
+        raise not_found
+
+    user = get_current_user(request, db)
+    if not user:
+        raise not_found
+
+    h = _handout_referencing(db, filename)
+    if h is not None:
+        campaign = (
+            db.query(Campaign).filter(Campaign.id == h.campaign_id).first()
+        )
+        if not campaign or not _user_can_view_campaign(db, user, campaign):
+            raise not_found
+        if not _can_see_handout(db, user, campaign, h):
+            raise not_found
+    else:
+        cid = _handout_media_campaign_id(filename)
+        if cid is None:
+            raise not_found
+        campaign = db.query(Campaign).filter(Campaign.id == cid).first()
+        if not campaign or not _user_is_gm(user, campaign, db):
+            raise not_found
+
+    # For a document, hand back the GM's original filename so a "save as"
+    # doesn't produce ``c1-9f3a….pdf``. ``inline`` keeps the browser
+    # rendering it in the viewer rather than downloading it — which is
+    # the whole point of the feature. Starlette only emits a
+    # Content-Disposition header when ``filename`` is set, so images
+    # (which need no name) simply get the default inline behavior.
+    download_name = None
+    if h is not None and h.file_name and h.file_url:
+        if h.file_url.rsplit("/", 1)[-1] == filename:
+            download_name = h.file_name
+
+    return FileResponse(
+        path,
+        # Gated bytes: a shared/proxy cache must never hold them, and a
+        # revoked reveal should take effect on the next request.
+        headers={"Cache-Control": "private, no-store"},
+        filename=download_name,
+        content_disposition_type="inline",
+    )
 
 
 # ───────────── Private-note encryption keys (Phase 4) ─────────────

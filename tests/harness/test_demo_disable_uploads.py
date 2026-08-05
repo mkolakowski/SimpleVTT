@@ -98,6 +98,7 @@ _GUARDED_UPLOAD_ENDPOINTS = {
     "upload_encounter_background",
     "set_campaign_background",
     "upload_handout_image",
+    "upload_handout_file",
     "upload_track",
     "admin_upload_thumbnail",
     "admin_upload_map",

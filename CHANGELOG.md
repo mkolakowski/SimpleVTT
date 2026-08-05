@@ -10,6 +10,40 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1046.0] - 2026-08-05 — "The Locked Reading Room"
+
+**Schema version:** 104
+
+**Commit summary:** Handout images and documents are authorization-gated instead of public static bytes, so hiding a handout actually revokes access to its media.
+
+**Description:** Security fix (the posture filed as a follow-up on the previous release, v2.1045.0 "The Sealed Envelope"). Handout media lived under `/static/uploads/handouts/` and was served by the `/static` mount to anyone with the URL. The reveal gate therefore controlled *distribution of the URL*, not the bytes — with two real consequences: a URL that escaped (browser history, a shared screenshot, a proxy log, a player who saved the link) read a secret handout **forever**, and hiding a handout did **not** revoke a player who had already loaded it. That was tolerable for a decorative NPC portrait and clearly wrong for a GM's sealed dispatch.
+
+`serve_handout_media` now authorizes every byte against `_can_see_handout` — the *same* single gate the JSON list/get paths use, so there is still one access decision to reason about, not two.
+
+**The URL shape deliberately did not change,** and that choice is most of the design. Moving the files to a private directory looked like the obvious fix and was the wrong one: `/app/app/static/uploads` is the `uploads_data` **named volume**, so anything moved off it stops being backed up by the `backup` service and vanishes on the next container rebuild. The admin center's storage accounting also walks that volume and indexes files by **basename** taken from the DB URL columns, so rewriting the columns to a private-scheme reference would have silently dropped handout media out of per-campaign quota enforcement. Keeping the path and intercepting the route instead means: bytes stay on the volume, backups keep working, storage accounting keeps working, no schema change, no data migration, no client change — and **every pre-existing handout is retroactively protected**, which a new-URL-scheme approach could only have achieved with a risky boot-time file move.
+
+The interception is registered directly on the app *before* the `/static` mount, because Starlette matches routes in registration order and the mount would otherwise swallow the prefix. It is scoped to `/static/uploads/handouts/` alone; every other `/static` path is served by `StaticFiles` exactly as before (regression-tested).
+
+Authorization has two cases. When a handout references the file, the requester must be a campaign member **and** pass `_can_see_handout`. When nothing references it — the GM has uploaded but not yet saved the composer, or the handout was deleted — there is no reveal flag to consult, so authorization falls back to the campaign id now baked into the filename (`c<campaign_id>-<uuid>.<ext>`): GM/co-GM of that campaign only. Legacy files keep their bare-UUID names and have no fallback, so they are simply unreachable once unreferenced — the safe direction.
+
+Every failure is a flat **404**, never 401/403: a 403 would confirm that a given un-revealed handout's media exists, which is precisely what an un-revealed handout must not disclose. Served responses carry `Cache-Control: private, no-store` so a shared cache can't outlive a revoked reveal, and a document is sent `Content-Disposition: inline` under the GM's original filename — so it still renders in the viewer, but a "save as" produces `harbor-ledger.pdf` rather than `c1-9f3a….pdf`.
+
+**Also fixed here:** handout **documents** were missing from the admin center's storage index (an oversight in v2.1045.0 — `file_url` was never added alongside `image_url`), so uploaded PDFs walked as "unattributed" bytes and escaped per-campaign quota enforcement. And `upload_handout_file` was missing from `test_demo_disable_uploads.py`'s allowlist, so that route-introspection sweep was passing over it vacuously — the endpoint did carry `require_uploads_enabled`, but nothing was checking that it kept doing so.
+
+### Added
+- `app/routes/notes_routes.py` — `serve_handout_media` (the gate); `_handout_referencing()` (LIKE prefilter + exact basename match, so a crafted name can't borrow another handout's permissions); `_handout_media_campaign_id()`; `_handout_media_name()` and the `c<campaign_id>-<uuid>.<ext>` convention.
+- `app/main.py` — registers the media route ahead of the `/static` mount, with a comment recording why the order is load-bearing.
+- `tests/harness/test_handout_media_gate.py` — 12 tests: campaign-prefixed filenames; **anonymous request with the exact URL → 404**; GM read; player blocked → revealed → **revoked on hide**; scoped reveal admits alice and refuses bob; the PDF path gated identically; unattached upload readable by GM but not a player; deleting the handout revokes player access; unknown name → 404; path traversal / nested path / dotfile → 404; **other `/static` paths still served**; `Cache-Control: private, no-store` present.
+
+### Changed
+- `app/routes/notes_routes.py` — both upload endpoints emit campaign-prefixed filenames. The returned URL prefix is unchanged, so existing clients and tests need no edit.
+- `app/admin_center/storage.py` — index `Handout.file_url` alongside `image_url` so handout documents are attributed to their campaign and count toward quota.
+- `tests/harness/test_demo_disable_uploads.py` — `upload_handout_file` added to `_GUARDED_UPLOAD_ENDPOINTS`; the sweep was previously skipping it.
+- `TODO.md` / `TODONE.md` / `docs/plans/notes-and-handouts.md` — the "serve handout media through an authorizing route" follow-up recorded as shipped.
+- `docs/test-harness-coverage.md` — new `test_handout_media_gate.py` section; harness total 4950 → **4962**.
+
+---
+
 ## [2.1045.0] - 2026-08-05 — "The Sealed Envelope"
 
 **Schema version:** 104

@@ -349,9 +349,15 @@ page for out-of-session work.
   which is exactly why this landed here instead of as a `Resource`
   model. Harness: `test_handout_file.py` (13). **Audio is still
   unbuilt**, and would want the campaign audio player rather than an
-  `<iframe>`. Also filed: serving handout media through an authorizing
-  route instead of the unguessable-UUID `/static/uploads/` path — worth
-  doing for images *and* documents at once, not PDFs alone.
+  `<iframe>`. The **access gate closed at v2.1046.0** ("The Locked
+  Reading Room"): `serve_handout_media` is registered ahead of the
+  `/static` mount and authorizes every byte through `_can_see_handout`,
+  for images *and* documents at once — so hiding a handout revokes its
+  media, and a leaked URL is useless without a session. The URL shape
+  was kept deliberately (bytes stay on the `uploads_data` volume, so
+  backups + storage accounting are untouched and every pre-existing
+  handout is retroactively protected). Harness:
+  `test_handout_media_gate.py` (12).
 - **Cross-campaign player notebook** — the encryption key is already
   per-user; a "my notebook across all my campaigns" view is a natural
   follow-up.
