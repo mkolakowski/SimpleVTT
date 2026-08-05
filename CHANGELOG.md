@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1043.2] - 2026-08-05 — "The Stale Ledger"
+
+**Schema version:** 103
+
+**Commit summary:** Reconcile three tracker claims that were already false — the automation-coverage classifier rerun, the Lighting "not done" tail, and the M1 borderline bug — after verifying each against the code.
+
+**Description:** Doc-only tracker reconciliation (backlog easy win). Three entries in `TODO.md` / `BUGS.md` described work as open that had in fact shipped; each was verified against the source before being struck, so the trackers stop pointing contributors at closed work.
+
+1. **Classifier rerun (`TODO.md` › Full Class-Feature Automation).** The line claimed `docs/automation-coverage.md`'s row counts "still pin v2.99.460". They don't — the rerun landed at v2.1031.2 (counts `289/35/8 → 306/31/9`, endpoint total `332 → 346`; see `docs/automation-coverage.md:31`), and `BUGS.md` B5 already recorded it FIXED. Only the TODO line was never struck.
+2. **Lighting tail (`TODO.md` › Maps & Map Editor).** The Lighting entry carried *"Not done: wall-occlusion shadows + fire flicker animation"*. **Both shipped.** Wall-occlusion shadows landed at v2.757.0 (the Maps 2.0 bullet directly above it already said so; `tabletop.js:~233` punches map lights into the overlay "with wall shadows"), and fire flicker landed at v2.849.0 as the colored torch-flicker glow canvas + rAF loop (`tabletop.html:~2565/3643`), extended to carried token lights at v2.852.0 and to a per-light `flicker` speed 0–4 at v2.935.0.
+3. **M1 — CON max-HP recompute path (`BUGS.md` › Borderline).** The entry asked someone to "verify no stale dual-path remains, then delete this line". Verified: **System B is gone.** The v2.308.0–v2.310.0 `/use_item` `use_kind: "ability_increase"` branch was retired at v2.314.0 (Phase 3 of `permanent-ability-increase-reconciliation.md`, status "Option 2a complete; plan closed") and `ability_increase` now appears in `tabletop_routes.py` only as a back-reference comment. Exactly one path permanently raises CON and recomputes max HP (`_use_item_action_permanent_boost`, ~113106). The separate `_effective_max_hp_for_sheet` (~46900) is **not** a second copy — it is the deliberately display-derived runtime-override path (Amulet of Health / `hp_max_bonus_per_level`) that leaves stored `hp.max` untouched per `str-override.md` option (a).
+
+One latent nit was found while verifying M1 and is recorded in the closed entry rather than re-filed: the permanent-boost path reads `sheet["level"]` directly while `_effective_max_hp_for_sheet` uses `_sheet_total_level(sheet)`, so the two would disagree on a multiclassed PC. No observed defect on the demo roster, so it is documented, not fixed here.
+
+No product code changed, so no harness test accompanies this commit (doc-only commits are exempt per `CLAUDE.md`).
+
+### Changed
+- `TODO.md` — classifier-rerun item struck as ✅ DONE (v2.1031.2) with the real counts; Lighting entry's stale "not done" clause replaced with the two ship references.
+- `BUGS.md` — M1 struck as ✅ VERIFIED RESOLVED with the substrate evidence + the multiclass-level nit.
+
+---
+
 ## [2.1043.1] - 2026-08-01 — "The Cover Art"
 
 **Schema version:** 103
