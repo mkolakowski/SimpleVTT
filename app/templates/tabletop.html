@@ -9632,6 +9632,18 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                         data-monster-name="${c.name}"
                         title="Open ${c.name}'s stat block">📋 Sheet</a>`;
                 }
+                /* v2.1044.1 — stamp the row so the expand handler below can
+                 * reach the monster sheet without re-deriving the URL, and
+                 * so it knows whether expanding this row would show a real
+                 * mini-sheet or just the orphan placeholder. ``monsterOrphan``
+                 * is only meaningful for THIS render pass: buildMonsterInitSheet
+                 * may re-link the template as a side effect, in which case the
+                 * next pass has hasCharDetail and the flag clears itself. */
+                const monsterRowAttrs = c.token_template_id
+                    ? ` data-monster-tid="${c.token_template_id}"` +
+                      ` data-monster-name="${c.name}"` +
+                      (hasCharDetail ? '' : ' data-monster-orphan="1"')
+                    : '';
                 // v2.729.0 — "🎲 Prompt" button (GM only) for a PC combatant
                 // that hasn't rolled initiative yet. Sends the owner a roll
                 // request; their response is written back as this combatant's
@@ -9887,7 +9899,7 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                 // (`?.classList.toggle(...)`) at tabletop.html:3225 /
                 // :5338 / :5443, so removing the element doesn't
                 // throw.
-                return `<div class="init-entry${isActive ? ' active-turn' : ''}" data-idx="${i}" data-char-id="${slotId}">
+                return `<div class="init-entry${isActive ? ' active-turn' : ''}" data-idx="${i}" data-char-id="${slotId}"${monsterRowAttrs}>
                     <div class="mini-header" data-idx="${i}" data-char-id="${slotId}">
                         ${tokenImg}
                         <div class="mini-header-info">
@@ -10201,6 +10213,17 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             }
         }));
 
+        /* v2.1044.1 — open a monster row's full stat block. Synthesizes a
+         * click on the row's own `📋 Sheet` anchor rather than building the
+         * URL again, so this rides the existing delegated
+         * `a.monster-sheet-link` interceptor: same drawer, same title label,
+         * same `?combatant_id=` live-HP overlay. If the anchor is missing
+         * (manual combatant with no template) nothing happens, which is the
+         * correct no-op. */
+        function _openMonsterSheetFor(entry) {
+            entry?.querySelector('a.monster-sheet-link')?.click();
+        }
+
         /* ⑤ Expand/collapse for ALL card entries — moves mini-body in/out of the sheet slot */
         list.querySelectorAll('.init-entry').forEach(entry => {
             const headerEl = entry.querySelector('.mini-header');
@@ -10235,9 +10258,24 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                 const now = Date.now();
                 if (headerEl._dbnc && now - headerEl._dbnc < 700) return;
                 headerEl._dbnc = now;
+                // v2.1044.1 — an orphan monster row has nothing worth
+                // expanding to: its card body is the "Template missing —
+                // open the full monster sheet via the 📋 button above"
+                // placeholder. Skip straight to the sheet rather than
+                // opening a dead end that just points at another button.
+                if (entry.dataset.monsterOrphan === '1') {
+                    _openMonsterSheetFor(entry);
+                    return;
+                }
+                _toggleOpen();
+            };
+            /* Extracted so the dblclick handler can undo the toggle the
+             * first click of the pair already applied. Returns the new
+             * open state. */
+            function _toggleOpen() {
                 const isOpen = sheetEl.classList.toggle('open');
                 headerEl.querySelector('.mini-header-arrow')?.classList.toggle('open', isOpen);
-                if (!charId) return;
+                if (!charId) return isOpen;
                 if (isOpen) {
                     /* Move the full mini-body into this initiative entry */
                     const miniBody = document.querySelector(`#char-detail-${charId} .mini-sheet .mini-body`);
@@ -10247,9 +10285,32 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                     const miniBody = sheetEl.querySelector('.mini-body');
                     if (miniBody) document.querySelector(`#char-detail-${charId} .mini-sheet`)?.appendChild(miniBody);
                 }
-            };
+                return isOpen;
+            }
             headerEl.addEventListener('click', _activate);
             headerEl.addEventListener('pointerup', _activate);
+
+            /* v2.1044.1 — double-click a monster row to open its full stat
+             * block, matching the map token's double-click-to-open. The
+             * single-click inline expand is deliberately preserved (it's
+             * faster than the drawer and keeps monster rows behaving like
+             * PC rows), so this ADDS an affordance rather than replacing
+             * one. Orphan rows already open the sheet on the first click,
+             * so they're excluded to avoid opening it twice. */
+            if (entry.dataset.monsterTid && entry.dataset.monsterOrphan !== '1') {
+                entry.addEventListener('dblclick', ev => {
+                    // Let the 📋 anchor / inputs / buttons keep their own
+                    // behavior; only the row background double-click opens.
+                    if (ev.target.closest('input, button, a')) return;
+                    ev.preventDefault();
+                    // The first click of the pair already ran _activate and
+                    // toggled the row (the second was swallowed by the
+                    // 700 ms debounce). Undo it so a double-click leaves the
+                    // expand state exactly as it was.
+                    _toggleOpen();
+                    _openMonsterSheetFor(entry);
+                });
+            }
         });
 
         /* ⑥ Scroll active row into view */

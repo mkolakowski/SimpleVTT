@@ -10,6 +10,34 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1044.1] - 2026-08-05 — "The Second Look"
+
+**Schema version:** 103
+
+**Commit summary:** Double-click a monster's init-tracker row to open its full stat block, and let orphan rows open it on the first click.
+
+**Description:** UI polish (backlog easy win — the filed "make the monster row's primary click open the sheet" note on the GM Tools monster-sheet entry in `TODO.md`). Opening a monster's stat block from the initiative tracker meant finding the small 📋 button; the map token already opens on double-click, so the row was the odd one out.
+
+**Shipped deliberately differently from how it was filed.** The note asked for the row's *primary* click. That click already toggles the inline mini-sheet, and monsters normally have a real one (`_hydrateMonsterCard` puts them in the card pool) — so taking the primary click would have removed a faster affordance than the drawer and made monster rows behave unlike PC rows. Instead:
+
+- **Double-click** a monster row opens the stat-block drawer. The single-click inline expand is untouched, so this adds an affordance rather than trading one away. Because the first click of a double-click pair has already run the expand toggle (the second is swallowed by the existing 700 ms debounce), the handler explicitly re-toggles to leave the expand state exactly as it found it.
+- **Orphan rows open on the first click.** When a combatant's template isn't in the card pool, expanding shows only the "Template missing — open the full monster sheet via the 📋 button above" placeholder. That is a dead end pointing at another button, so those rows now skip straight to the sheet. The flag is read at click time, so a row that gets re-linked mid-session stops being treated as an orphan on the next render.
+
+Both paths open the sheet by synthesizing a click on the row's own 📋 anchor rather than rebuilding the URL, so they ride the existing delegated `a.monster-sheet-link` interceptor — same drawer, same title, same `?combatant_id=` live-HP overlay, no duplicated URL logic.
+
+**Note for future test authors** (recorded in the test file + coverage catalog rather than fixed here, since it causes no user-visible defect and is outside this commit's scope): `#monster-sheet-drawer`'s inline style at `app/templates/tabletop.html:~6002` declares both `display:none` and `display:flex`, so the later wins and the element is *always* "visible" — it is hidden only by `transform: translateX(100%)`. An `expect(drawer).to_be_visible()` assertion therefore passes trivially; the honest open signal is `#monster-sheet-backdrop` plus the iframe `src`.
+
+### Added
+- `app/templates/tabletop.html` — `data-monster-tid` / `data-monster-name` / `data-monster-orphan` stamped on monster `.init-entry` rows; `_openMonsterSheetFor(entry)` helper; a `dblclick` listener per monster row; orphan short-circuit inside the existing `_activate` handler.
+- `tests/harness_ui/test_init_monster_row_sheet.py` — 4 Playwright tests: row stamping + 📋 anchor present; single-click still expands inline and leaves the drawer closed; double-click opens the drawer and preserves expand state; orphan row opens the sheet on the first click without expanding.
+
+### Changed
+- `app/templates/tabletop.html` — the init-row expand/collapse body is extracted into a `_toggleOpen()` helper so the dblclick handler can reuse it to undo the first click's toggle. No behavior change to the toggle itself.
+- `TODO.md` — GM Tools monster-sheet entry records the shipped behavior and why it diverges from the filed note.
+- `docs/test-harness-coverage.md` — new UI-suite section; UI total 316 → **320**.
+
+---
+
 ## [2.1044.0] - 2026-08-05 — "The Empty Chair"
 
 **Schema version:** 103
