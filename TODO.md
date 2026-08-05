@@ -943,8 +943,10 @@ Shipped as the Vision & Light engine — light emitters (radius/colour/falloff),
 
 ## Media & Content
 
-### Resources
-A dedicated section for GMs and admins to upload documents (PDFs, images, handouts) that players can view directly in the browser — inline PDF rendering, no download required. Needs access control so GMs can choose whether a resource is visible to all players or GM-only.
+### Resources — ✅ SHIPPED (v2.1045.0 "The Sealed Envelope")
+Shipped as **document attachments on handouts**, not as a separate `Resource` model — `Handout` already carried the exact access control the item asked for (`revealed` / `reveal_to`: un-revealed = GM-only, `"all"` = every player, plus reveal-to-named-players, which the ask didn't reach for), so a second visibility surface would have been a near-duplicate. `Handout.file_url` / `file_name` / `file_size` (schema v104) + `POST …/handouts/upload_file` (GM-only, **PDF only**, ≤ 25 MB, `%PDF-` magic-byte checked) + an inline `<iframe>` viewer in the Notes drawer with a "⤢ Full page" link. See [`TODONE.md`](TODONE.md) → Media & Content. Harness: `test_handout_file.py` (13).
+
+*Remaining tails:* (1) **handout audio** — still filed on [`notes-and-handouts.md`](docs/plans/notes-and-handouts.md); (2) **non-PDF document types** — deliberately out of scope, since the feature's promise is inline rendering with no download and PDF is the only format every browser does that with natively; (3) **serving handout media through an authorizing route** — today the file sits at an unguessable UUID path under `/static/uploads/`, served without auth (same posture as handout images and map images), so the reveal gate controls distribution of the URL rather than the bytes. Worth doing across *all* handout media at once rather than for PDFs alone.
 
 ### Playlist Builder with Existing Songs ✅ (shipped)
 Shipped — `Playlist` + `PlaylistTrack` models + campaign playlist endpoints (`create_playlist`, rename, tags, description, track ordering) in `audio_routes.py`, built from already-uploaded tracks, with referenced-track deletion guarded. See [`TODONE.md`](TODONE.md) → Media & Content.

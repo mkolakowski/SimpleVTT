@@ -49,6 +49,14 @@ _HANDOUT_IMG_DIR.mkdir(parents=True, exist_ok=True)
 _MAX_HANDOUT_IMG_BYTES = 8 * 1024 * 1024
 _ALLOWED_HANDOUT_IMG_EXT = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
 
+# Document attachments (v2.1045.0, the "Resources" tier). Same directory
+# + UUID-naming as images; PDF only, because the point of the feature is
+# that the browser renders it inline with no download step. 25 MB covers a
+# scanned module map / adventure handout without letting a campaign's
+# storage quota get eaten by one upload.
+_MAX_HANDOUT_DOC_BYTES = 25 * 1024 * 1024
+_ALLOWED_HANDOUT_DOC_EXT = {".pdf"}
+
 _MAX_TITLE = 200
 _MAX_BODY = 50_000
 # Ciphertext envelopes ({v,iv,ct} base64) are larger than the plaintext;
@@ -383,12 +391,26 @@ def _handout_dict(h: Handout) -> dict:
         "title": h.title,
         "body": h.body or "",
         "image_url": h.image_url,
+        "file_url": h.file_url,
+        "file_name": h.file_name or "",
+        "file_size": h.file_size,
         "folder": h.folder or "",
         "revealed": bool(h.revealed),
         "reveal_to": h.reveal_to if h.reveal_to is not None else [],
         "created_at": h.created_at.isoformat() if h.created_at else None,
         "updated_at": h.updated_at.isoformat() if h.updated_at else None,
     }
+
+
+def _coerce_file_size(raw) -> "int | None":
+    """Client-reported document byte count → a sane int, or None. Purely
+    cosmetic (the card shows "1.2 MB"), so a junk value degrades to None
+    rather than 400-ing a save whose real payload is the URL."""
+    try:
+        n = int(raw)
+    except (TypeError, ValueError):
+        return None
+    return n if n > 0 else None
 
 
 def _can_see_handout(db: Session, user: User, campaign: Campaign,
@@ -455,7 +477,9 @@ async def create_handout(
     user: User = Depends(require_user),
 ):
     """Author a handout (GM/co-GM only). Created un-revealed. Body:
-    ``{title, body?, image_url?, folder?}`` — title is required."""
+    ``{title, body?, image_url?, file_url?, file_name?, file_size?,
+    folder?}`` — title is required. The ``file_*`` trio is the document
+    attachment returned by ``/handouts/upload_file``."""
     campaign = _campaign_or_403(db, user, campaign_id)
     if not _user_is_gm(user, campaign, db):
         raise HTTPException(403, "GM only")
@@ -476,6 +500,9 @@ async def create_handout(
         title=title,
         body=note_body,
         image_url=(body.get("image_url") or None),
+        file_url=(body.get("file_url") or None),
+        file_name=((body.get("file_name") or "").strip()[:255] or None),
+        file_size=_coerce_file_size(body.get("file_size")),
         folder=(body.get("folder") or "").strip()[:120],
         revealed=False,
         reveal_to=[],
@@ -495,7 +522,8 @@ async def update_handout(
     user: User = Depends(require_user),
 ):
     """Edit a handout (GM/co-GM only). Updatable: title, body,
-    image_url, folder. Reveal state is changed via /reveal, not here."""
+    image_url, file_url/file_name/file_size, folder. Reveal state is
+    changed via /reveal, not here."""
     campaign = _campaign_or_403(db, user, campaign_id)
     if not _user_is_gm(user, campaign, db):
         raise HTTPException(403, "GM only")
@@ -523,6 +551,17 @@ async def update_handout(
         h.body = b
     if "image_url" in body:
         h.image_url = body.get("image_url") or None
+    if "file_url" in body:
+        # Clearing file_url detaches the document — drop the display
+        # metadata with it so a stale filename never outlives the file.
+        h.file_url = body.get("file_url") or None
+        if h.file_url is None:
+            h.file_name = None
+            h.file_size = None
+    if "file_name" in body:
+        h.file_name = (body.get("file_name") or "").strip()[:255] or None
+    if "file_size" in body:
+        h.file_size = _coerce_file_size(body.get("file_size"))
     if "folder" in body:
         h.folder = (body.get("folder") or "").strip()[:120]
 
@@ -570,7 +609,8 @@ async def reveal_handout(
       - reveal to ``"all"`` → to every campaign client.
       - reveal to a user_id list → scoped to those users (+ GMs) via
         ``recipient_filter`` so a secret handout never toasts on a
-        non-target's screen; the event carries the title + has_image.
+        non-target's screen; the event carries the title + has_image +
+        has_file.
       - hide (``revealed: false``) → a minimal ``{handout_id,
         revealed: false}`` event to everyone so any client holding it
         drops it (no title leak).
@@ -610,6 +650,7 @@ async def reveal_handout(
             "handout_id": h.id,
             "title": h.title,
             "has_image": bool(h.image_url),
+            "has_file": bool(h.file_url),
             "revealed": True,
         }
         if reveal_to == "all":
@@ -658,6 +699,56 @@ async def upload_handout_image(
     fname = uuid.uuid4().hex + ext
     (_HANDOUT_IMG_DIR / fname).write_bytes(data)
     return {"ok": True, "image_url": "/static/uploads/handouts/" + fname}
+
+
+@router.post("/api/campaign/{campaign_id}/handouts/upload_file")
+async def upload_handout_file(
+    campaign_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+    _uploads_gate: None = Depends(require_uploads_enabled),
+):
+    """Upload a document for a handout (GM/co-GM only) → returns its URL
+    plus the original filename and byte count, which the client puts in
+    the handout's ``file_url`` / ``file_name`` / ``file_size``. Stored
+    under /static/uploads/handouts/ under a UUID name. **PDF only, ≤ 25
+    MB** — the feature's point is that players read it inline in the
+    browser, and PDF is the one document format every browser renders
+    natively without a plugin or a download step.
+
+    Who may *read* the document is the handout's job, not this
+    endpoint's: the URL is only ever handed out through
+    ``_handout_dict``, which the list/get paths gate on
+    ``_can_see_handout``. Same unguessable-capability-URL posture as
+    handout images and map images.
+    """
+    campaign = _campaign_or_403(db, user, campaign_id)
+    if not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+    original = Path(file.filename or "").name
+    ext = Path(original).suffix.lower()
+    if ext not in _ALLOWED_HANDOUT_DOC_EXT:
+        raise HTTPException(400, "Unsupported document format (PDF only)")
+    data = await file.read()
+    if len(data) > _MAX_HANDOUT_DOC_BYTES:
+        raise HTTPException(400, "Document exceeds 25 MB limit")
+    # A .pdf extension is a claim, not a fact — refuse anything the
+    # browser wouldn't render as a PDF anyway.
+    if not data.startswith(b"%PDF-"):
+        raise HTTPException(400, "File is not a valid PDF")
+    from ..storage_quota import check_quota
+    _q = check_quota(db, campaign_id, len(data))
+    if _q:
+        raise HTTPException(413, _q)
+    fname = uuid.uuid4().hex + ext
+    (_HANDOUT_IMG_DIR / fname).write_bytes(data)
+    return {
+        "ok": True,
+        "file_url": "/static/uploads/handouts/" + fname,
+        "file_name": original[:255],
+        "file_size": len(data),
+    }
 
 
 # ───────────── Private-note encryption keys (Phase 4) ─────────────

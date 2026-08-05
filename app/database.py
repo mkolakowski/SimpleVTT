@@ -1218,6 +1218,28 @@ def _apply_inline_migrations() -> None:
                 "BOOLEAN NOT NULL DEFAULT FALSE"
             ))
 
+    # ---- Schema v104 (2.1045.0): handouts document attachment ----
+    # The "Resources" tier — a GM-uploaded PDF players read inline in the
+    # browser, gated by the handout's existing revealed/reveal_to rules.
+    # All three columns are nullable/additive: an existing handout simply
+    # has no document. file_url is the /static/uploads/handouts/ URL,
+    # file_name the GM's original filename (display only), file_size bytes.
+    handout_cols_v104 = _column_names("handouts")
+    with engine.begin() as conn:
+        if handout_cols_v104:
+            if "file_url" not in handout_cols_v104:
+                conn.execute(text(
+                    "ALTER TABLE handouts ADD COLUMN file_url VARCHAR(500)"
+                ))
+            if "file_name" not in handout_cols_v104:
+                conn.execute(text(
+                    "ALTER TABLE handouts ADD COLUMN file_name VARCHAR(255)"
+                ))
+            if "file_size" not in handout_cols_v104:
+                conn.execute(text(
+                    "ALTER TABLE handouts ADD COLUMN file_size INTEGER"
+                ))
+
 
 def _make_character_campaign_nullable(inspector) -> None:
     """Make characters.campaign_id nullable so characters can exist without a campaign."""

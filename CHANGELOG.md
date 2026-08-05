@@ -10,6 +10,41 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1045.0] - 2026-08-05 — "The Sealed Envelope"
+
+**Schema version:** 104
+
+**Commit summary:** Handouts carry a PDF document that players read inline in the browser, gated by the handout's existing reveal rules.
+
+**Description:** Feature (the **Resources** entry under Media & Content in `TODO.md`, and the filed "handout media beyond images (PDF/audio) — reuse the upload flow" follow-up in [`docs/plans/notes-and-handouts.md`](docs/plans/notes-and-handouts.md)). The ask was a place for a GM to upload documents that players view directly in the browser — inline PDF rendering, no download step — with access control over who sees each one.
+
+**Built on the handout substrate rather than as a new "Resources" model.** A `Resource` table would have needed its own visibility rules, its own list endpoint, its own drawer pane, and its own WS event — a second, near-identical copy of machinery `Handout` already has. `Handout.revealed` / `reveal_to` is *exactly* the requested control ("GM-only" = un-revealed; "all players" = `reveal_to: "all"`; and it also already supports revealing to named players, which the ask didn't reach for). So a document is three additive nullable columns on `handouts`, and every access decision continues to route through the one `_can_see_handout` gate that already governs the title, body, and image. The gate is regression-tested from the document's angle: an un-revealed document's `file_url` is absent from a player's list *and* 404s by id, appears on reveal, and disappears again on hide.
+
+**PDF only, on purpose.** The feature's value is that the browser renders the document in place with no plugin and no download, and PDF is the one format every browser does that with natively. A `.pdf` extension is treated as a claim rather than a fact — the upload also checks the `%PDF-` magic bytes, so a mislabeled file is rejected at the door instead of rendering as a blank frame later.
+
+Two smaller notes: the client treats `file_url` as untrusted before it becomes an `iframe` src (same-origin absolute paths and `http(s)` only, keeping `javascript:`/`data:` out of the viewer), since a GM can PATCH that field to an arbitrary string; and `file_size` is cosmetic, so a junk value degrades to null rather than 400-ing a save whose real payload is the URL.
+
+**Known posture, unchanged from handout images and map images:** the file lives at an unguessable UUID path under `/static/uploads/handouts/`, which is served without auth. The reveal gate controls *distribution of the URL*, not the bytes. Serving documents through an authorizing route is a reasonable follow-up, but doing it for PDFs alone while images stay on static would split one feature across two postures — worth doing as its own change across all handout media.
+
+### Added
+- `app/models.py` — `Handout.file_url` / `file_name` / `file_size` (all nullable, additive).
+- `app/database.py` — schema v104 migration: three `ALTER TABLE handouts ADD COLUMN` guards.
+- `app/routes/notes_routes.py` — `POST /api/campaign/{cid}/handouts/upload_file` (GM-only, PDF only, ≤ 25 MB, `%PDF-` magic-byte check, storage-quota checked) returning `{file_url, file_name, file_size}`; `_coerce_file_size()`.
+- `app/static/notes.js` — a 📄 PDF picker + "Remove" control in the handout editor; `handoutDocHtml()` inline `<iframe>` viewer with a "⤢ Full page" escape hatch for the narrow drawer; `fileSizeLabel()` and `safeDocUrl()` helpers.
+- `tests/harness/test_handout_file.py` — 13 tests: upload happy path, the URL actually serving bytes, create/PATCH round-trip, detach, the hidden-until-revealed gate, scoped reveal, `has_file` on the broadcast (both true and false), hide-withdraws-again, plus 403 / bad-extension / bad-magic-bytes / junk-size error paths.
+
+### Changed
+- `app/routes/notes_routes.py` — `_handout_dict` returns the `file_*` trio; create + PATCH accept it (clearing `file_url` drops the name and size with it, so a stale filename never outlives the file); the `handout_revealed` broadcast carries `has_file`.
+- `app/static/notes.js` — the reveal toast shows 📄 instead of 📜 for a handout with a document.
+- `TODO.md` / `TODONE.md` — the Media & Content "Resources" entry moves to shipped.
+- `docs/plans/notes-and-handouts.md` — the "handout media beyond images" follow-up records the PDF half as shipped.
+- `docs/test-harness-coverage.md` — new `test_handout_file.py` section; harness total 4937 → **4950** (verified by `--collect-only`).
+
+### Schema
+- **v104** — `handouts.file_url` (VARCHAR 500), `handouts.file_name` (VARCHAR 255), `handouts.file_size` (INTEGER), all nullable. An existing handout simply has no document.
+
+---
+
 ## [2.1044.1] - 2026-08-05 — "The Second Look"
 
 **Schema version:** 103

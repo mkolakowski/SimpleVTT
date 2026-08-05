@@ -56,6 +56,27 @@
     return d.innerHTML;
   }
 
+  // Bytes → "812 KB" / "1.4 MB". Display only; a missing/absurd size
+  // just renders nothing rather than "NaN".
+  function fileSizeLabel(bytes) {
+    var n = Number(bytes);
+    if (!isFinite(n) || n <= 0) return "";
+    if (n < 1024) return n + " B";
+    if (n < 1024 * 1024) return Math.round(n / 1024) + " KB";
+    return (n / (1024 * 1024)).toFixed(1) + " MB";
+  }
+
+  // A handout's file_url is GM-writable through PATCH, so it is treated
+  // as untrusted before it becomes an iframe src / href: same-origin
+  // absolute paths and http(s) URLs only, which keeps javascript: and
+  // data: out of the document viewer.
+  function safeDocUrl(url) {
+    var u = String(url || "").trim();
+    if (!u) return "";
+    if (u.charAt(0) === "/" && u.charAt(1) !== "/") return u;
+    return /^https?:\/\//i.test(u) ? u : "";
+  }
+
   // ── Safe-subset Markdown renderer ──────────────────────────────────
   // XSS-safe by construction: the input is HTML-escaped FIRST, so no raw
   // markup survives; the transforms below only inject our own known tags
@@ -380,6 +401,9 @@
     var t = h ? (h.title || "") : "";
     var b = h ? (h.body || "") : "";
     var img = h ? (h.image_url || "") : "";
+    var doc = h ? (h.file_url || "") : "";
+    var docName = h ? (h.file_name || "") : "";
+    var docSize = h && h.file_size ? h.file_size : "";
     var f = h ? (h.folder || "") : "";
     return '' +
       '<div class="ho-editor" data-id="' + id + '" style="' + CARD_STYLE + '">' +
@@ -392,6 +416,23 @@
         '<label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--fg-mute);margin-bottom:6px;">' +
           'or upload: <input class="ho-image-file" type="file" accept="image/*" style="font-size:11px;"></label>' +
         '<div class="ho-image-status" style="font-size:11px;color:var(--fg-mute);margin-bottom:6px;"></div>' +
+        // Document (PDF) attachment. The URL/name/size are carried in
+        // hidden inputs so the save path reads them the same way it reads
+        // the typed fields; the visible affordance is the file picker plus
+        // a "Remove" for an already-attached document.
+        '<input class="ho-file-url" type="hidden" value="' + esc(doc) + '">' +
+        '<input class="ho-file-name" type="hidden" value="' + esc(docName) + '">' +
+        '<input class="ho-file-size" type="hidden" value="' + esc(String(docSize)) + '">' +
+        '<label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--fg-mute);margin-bottom:6px;">' +
+          '📄 PDF: <input class="ho-file-input" type="file" accept="application/pdf,.pdf" style="font-size:11px;"></label>' +
+        '<div class="ho-file-status" style="font-size:11px;color:var(--fg-mute);margin-bottom:6px;' +
+          'display:flex;align-items:center;gap:8px;flex-wrap:wrap;">' +
+          (doc
+            ? '<span class="ho-file-label">' + esc(docName || "Attached PDF") +
+              (docSize ? ' (' + esc(fileSizeLabel(docSize)) + ')' : '') + '</span>' +
+              '<button class="ho-file-clear" type="button" style="' + EDIT_BTN_STYLE + '">Remove</button>'
+            : '') +
+        '</div>' +
         '<input class="ho-folder-input" type="text" maxlength="120" ' +
           'placeholder="Folder (optional)" value="' + esc(f) + '" style="' + INPUT_STYLE + '">' +
         '<div style="display:flex;gap:8px;">' +
@@ -442,12 +483,36 @@
       ? '<div class="note-md" style="font-size:12px;margin-top:6px;color:var(--fg);">' +
         renderMarkdown(h.body) + '</div>'
       : "";
+    var doc = handoutDocHtml(h);
     var folder = h.folder
       ? '<div style="margin-top:6px;"><span style="font-size:10px;color:var(--fg-mute);' +
         'border:1px solid var(--border);border-radius:10px;padding:1px 7px;">' +
         esc(h.folder) + '</span></div>'
       : "";
-    return body + img + folder;
+    return body + img + doc + folder;
+  }
+
+  // Inline PDF viewer — the "Resources" tier. The document renders in
+  // place (every browser renders application/pdf natively), so a player
+  // reads a handout without a download step; the ⤢ link is the escape
+  // hatch for a full-window read on a narrow drawer.
+  function handoutDocHtml(h) {
+    var url = safeDocUrl(h.file_url);
+    if (!url) return "";
+    var size = fileSizeLabel(h.file_size);
+    var label = (h.file_name || "Document") + (size ? " (" + size + ")" : "");
+    return '' +
+      '<div class="ho-doc" style="margin-top:8px;">' +
+        '<div style="display:flex;align-items:center;justify-content:space-between;' +
+          'gap:8px;font-size:11px;color:var(--fg-mute);margin-bottom:4px;">' +
+          '<span>📄 ' + esc(label) + '</span>' +
+          '<a href="' + esc(url) + '" target="_blank" rel="noopener noreferrer" ' +
+            'title="Open in a new tab" style="white-space:nowrap;">⤢ Full page</a>' +
+        '</div>' +
+        '<iframe class="ho-doc-frame" src="' + esc(url) + '" title="' + esc(label) + '" ' +
+          'style="width:100%;height:420px;border:1px solid var(--border);' +
+          'border-radius:6px;background:var(--bg-0);"></iframe>' +
+      '</div>';
   }
 
   function gmHandoutCard(h) {
@@ -503,6 +568,9 @@
       title: editor.querySelector(".ho-title-input").value.trim(),
       body: editor.querySelector(".ho-body-input").value.trim(),
       image_url: editor.querySelector(".ho-image-input").value.trim(),
+      file_url: editor.querySelector(".ho-file-url").value.trim(),
+      file_name: editor.querySelector(".ho-file-name").value.trim(),
+      file_size: parseInt(editor.querySelector(".ho-file-size").value, 10) || null,
       folder: editor.querySelector(".ho-folder-input").value.trim(),
     };
     if (!payload.title) { window.alert("Give the handout a title."); return; }
@@ -547,6 +615,52 @@
     } catch (e) {
       if (status) status.textContent = "Upload failed.";
     }
+  }
+
+  async function uploadHandoutFile(file, inputEl) {
+    var editor = inputEl.closest(".ho-editor");
+    if (!editor) return;
+    var status = editor.querySelector(".ho-file-status");
+    if (status) status.textContent = "Uploading…";
+    var fd = new FormData();
+    fd.append("file", file);
+    try {
+      var r = await fetch(HANDOUTS_API + "/upload_file", { method: "POST", body: fd });
+      if (!r.ok) {
+        var msg = "Upload failed.";
+        try { msg = (await r.json()).detail || msg; } catch (e2) { /* keep default */ }
+        if (status) status.textContent = msg;
+        else window.alert(msg);
+        return;
+      }
+      var d = await r.json();
+      editor.querySelector(".ho-file-url").value = d.file_url || "";
+      editor.querySelector(".ho-file-name").value = d.file_name || "";
+      editor.querySelector(".ho-file-size").value = d.file_size || "";
+      if (status) {
+        status.innerHTML =
+          '<span class="ho-file-label">✓ ' + esc(d.file_name || "Attached PDF") +
+          (d.file_size ? ' (' + esc(fileSizeLabel(d.file_size)) + ')' : '') + '</span>' +
+          '<button class="ho-file-clear" type="button" style="' + EDIT_BTN_STYLE + '">Remove</button>';
+      }
+    } catch (e) {
+      if (status) status.textContent = "Upload failed.";
+    }
+  }
+
+  // Detach the document from the editor's staged state. The file itself
+  // stays on disk (same as a replaced handout image) — clearing file_url
+  // is what makes the server drop the name/size on save.
+  function clearHandoutFile(btn) {
+    var editor = btn.closest(".ho-editor");
+    if (!editor) return;
+    editor.querySelector(".ho-file-url").value = "";
+    editor.querySelector(".ho-file-name").value = "";
+    editor.querySelector(".ho-file-size").value = "";
+    var picker = editor.querySelector(".ho-file-input");
+    if (picker) picker.value = "";
+    var status = editor.querySelector(".ho-file-status");
+    if (status) status.textContent = "Document removed.";
   }
 
   async function revealHandout(id, payload) {
@@ -826,6 +940,8 @@
       editingHandoutId = parseInt(t.dataset.id, 10); handoutComposerOpen = false; render();
     } else if (t.classList.contains("ho-del")) {
       if (window.confirm("Delete this handout?")) deleteHandout(parseInt(t.dataset.id, 10));
+    } else if (t.classList.contains("ho-file-clear")) {
+      clearHandoutFile(t);
     } else if (t.classList.contains("ho-save")) {
       var hed = t.closest(".ho-editor");
       if (hed) saveHandoutFromEditor(hed);
@@ -862,6 +978,9 @@
     if (ev.target.classList.contains("ho-image-file")) {
       var file = ev.target.files && ev.target.files[0];
       if (file) uploadHandoutImage(file, ev.target);
+    } else if (ev.target.classList.contains("ho-file-input")) {
+      var doc = ev.target.files && ev.target.files[0];
+      if (doc) uploadHandoutFile(doc, ev.target);
     }
   });
 
@@ -890,9 +1009,10 @@
         loadHandouts();
       } else if (msg.data.revealed) {
         if (typeof window.showToast === "function") {
-          window.showToast("📜 New handout: " + (msg.data.title || "Handout"), "info");
+          var icon = msg.data.has_file ? "📄" : "📜";
+          window.showToast(icon + " New handout: " + (msg.data.title || "Handout"), "info");
         }
-        loadHandouts();  // fetch the body/image now that it's revealed to us
+        loadHandouts();  // fetch the body/image/document now that it's ours
       } else {
         // Hidden from us — drop it.
         handouts = handouts.filter(function (h) { return h.id !== msg.data.handout_id; });

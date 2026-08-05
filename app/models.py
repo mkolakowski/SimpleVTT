@@ -1264,6 +1264,16 @@ class Handout(Base):
     title: Mapped[str] = mapped_column(String(200))
     body: Mapped[str] = mapped_column(Text, default="")
     image_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    # Document attachment (v2.1045.0, schema v104) — the "Resources" tier:
+    # a PDF the GM uploads and players read inline in the browser. Rides the
+    # same ``revealed`` / ``reveal_to`` gate as the rest of the handout, so a
+    # document is GM-only until revealed. ``file_name`` keeps the GM's
+    # original filename for display (the on-disk name is a UUID);
+    # ``file_size`` is bytes, shown in the card so a player knows what
+    # they're about to load.
+    file_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    file_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    file_size: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     folder: Mapped[str] = mapped_column(
         String(120), default="", server_default="",
     )

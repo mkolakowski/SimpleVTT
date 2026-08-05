@@ -339,7 +339,19 @@ page for out-of-session work.
   "Set up / Recover with" buttons in the drawer.
 - ✅ **Handout image *upload* widget** — shipped v2.564.0
   (`POST …/handouts/upload_image` + a composer file picker).
-- **Handout media beyond images** (PDF/audio) — reuse the upload flow.
+- 🟠 **Handout media beyond images** — the **PDF half shipped v2.1045.0**
+  ("The Sealed Envelope"), closing the *Resources* item in `TODO.md`:
+  `Handout.file_url` / `file_name` / `file_size` (schema v104) +
+  `POST …/handouts/upload_file` (GM-only, PDF only, ≤ 25 MB, `%PDF-`
+  magic-byte checked) + an inline `<iframe>` viewer in the drawer. It
+  rides the existing `revealed` / `reveal_to` gate, so there is one
+  `_can_see_handout` decision rather than a second visibility surface —
+  which is exactly why this landed here instead of as a `Resource`
+  model. Harness: `test_handout_file.py` (13). **Audio is still
+  unbuilt**, and would want the campaign audio player rather than an
+  `<iframe>`. Also filed: serving handout media through an authorizing
+  route instead of the unguessable-UUID `/static/uploads/` path — worth
+  doing for images *and* documents at once, not PDFs alone.
 - **Cross-campaign player notebook** — the encryption key is already
   per-user; a "my notebook across all my campaigns" view is a natural
   follow-up.
