@@ -162,6 +162,12 @@ def _build_index(db):
         User,
     )
 
+    # NOTE (v2.1047.0): this column set is mirrored by
+    # ``app/routes/media_routes.py::resolve_media_owner``, which decides
+    # who may *read* each uploaded file. A column added here without
+    # being added there makes its media 404 for everyone; a column added
+    # there without being added here makes its bytes escape per-campaign
+    # quota accounting. Keep the two in step.
     index: dict[str, dict] = {}
 
     def _add(url, *, campaign_id=None, user_id=None):

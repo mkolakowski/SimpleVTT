@@ -10,6 +10,38 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1047.0] - 2026-08-05 — "The Closed Stacks"
+
+**Schema version:** 104
+
+**Commit summary:** The rest of the uploads tree — maps, thumbnails, tokens, portraits, token templates, encounter backgrounds, audio — is authorization-gated like handouts were.
+
+**Description:** Security fix, generalizing v2.1046.0. Handouts were the one bucket promoted off the "unguessable capability URL" posture; every other bucket was still served by the `/static` mount with **no auth check at all**. A GM's unrevealed map, a player's portrait, a campaign's audio — anyone holding the URL, logged in or not, got the bytes.
+
+`serve_upload` closes that for `maps`, `thumbnails`, `tokens`, `portraits`, `token_templates`, `encounter_bg`, and `audio`. It is registered *after* the handouts route (so handouts keep their stricter per-player reveal rules) and *before* the `/static` mount. Buckets outside the gated set, and everything else under `/static` — including the bundled demo art under `/static/demo/` — fall through unchanged.
+
+**Resolution is by exact URL match across every column that can hold one, not per-bucket.** That distinction is load-bearing: since v2.1043.0 a file under `maps/` can be referenced by `Campaign.thumbnail_url` rather than `Map.image_url`, so a bucket-keyed lookup would have wrongly denied it. The column set mirrors `admin_center/storage.py::_build_index`, which is the established inventory of "every DB column holding an uploads URL" — if a column is added there it must be added here too, and that coupling is called out in both files.
+
+**Orphans fail closed.** A file no row references — the app has never deleted media when its row is deleted — returns 404. Nothing in the UI links to an unreferenced file, so this breaks no rendering; a stale URL simply stops working. The real risk in this design is *missing a column*, so `test_media_gate.py` harvests the media URLs the settings page actually renders and asserts each still serves: a forgotten column shows up as a concrete broken image rather than a silent regression.
+
+**Caching is deliberately different from handouts.** Handout media is `no-store` because a revoked reveal must take effect immediately. Ordinary campaign art can't be — `no-store` would make the tabletop re-download every token and map on every load. It's served `private, max-age=0, must-revalidate` instead: shared and proxy caches stay out, the browser keeps the bytes and confirms them with a conditional request, and the handler answers `If-None-Match` with a 304 itself, because `FileResponse` (unlike `StaticFiles`) does not.
+
+**Two bugs caught by the tests during development, recorded because both were silent:**
+- An owner-resolution memo cache (300 s TTL) **broke revocation** — deleting a map left its file readable until the entry aged out, contradicting the whole point of resolving by DB reference. The cache is gone; a comment in its place explains why, and what would have to exist before one is added back.
+- `FileResponse` populates `ETag`/`Last-Modified` only when the response is *sent*, not at construction, so the conditional-request check never saw an ETag and every revalidation shipped the whole file. Fixed by passing `stat_result` up front.
+
+**Scope notes.** Range requests are *not* a regression: the `/static` mount already answers `Range` with a plain 200 (verified against the running container), so gated audio and video behave exactly as before. The export bundle reads files from disk rather than over HTTP, so it is unaffected — though a bundle's zip still contains raw media bytes, which is inherent to "export my campaign." The admin center neither mounts `/static` nor renders any uploads URL, so it needs no change. On a demo deployment the blast radius is near-zero: the seeded demo references no uploaded media at all (its art is bundled under `/static/demo/`); the value here is for real installs.
+
+### Added
+- `app/routes/media_routes.py` — `serve_upload` (the gate), `resolve_media_owner` (exact-URL resolution across Campaign / Map / Token / TokenTemplate / Encounter / Handout / PlaylistTrack / Character columns, including the standalone-portrait `("user", id)` case), `_may_read`.
+- `app/main.py` — registers the gate after the handouts route and before the `/static` mount.
+- `tests/harness/test_media_gate.py` — 11 tests: member read; **anonymous request with the exact URL → 404**; a campaign *player* can read (the gate is membership, not GM-only); the rendered-media coverage guard; **deleting the row revokes access**; orphan → 404; percent-encoded traversal / nested path / dotfile → 404 (and no stylesheet bytes leak); `/static/style.css` and `/static/demo/` still served; `private` but not `no-store` plus an ETag; conditional request → 304 with an empty body; handouts keep their stricter `no-store` handler.
+
+### Changed
+- `app/admin_center/storage.py` — comment noting that its column inventory is now mirrored by the media gate.
+
+---
+
 ## [2.1046.0] - 2026-08-05 — "The Locked Reading Room"
 
 **Schema version:** 104

@@ -27,6 +27,7 @@ from .routes import (
     auth_routes,
     demo_magic_link_routes,
     homebrew_routes,
+    media_routes,
     notes_routes,
     session_recap_routes,
     suggestion_routes,
@@ -257,6 +258,19 @@ app.add_api_route(
     methods=["GET", "HEAD"],
     include_in_schema=False,
     name="handout_media",
+)
+# v2.1047.0 — the same gate for the rest of the uploads tree (maps,
+# thumbnails, tokens, portraits, token_templates, encounter_bg, audio).
+# Registered AFTER the handouts route above so handouts keep their
+# stricter per-player reveal rules, and BEFORE the mount so both win
+# over StaticFiles. Buckets outside the gated set fall through to the
+# mount unchanged.
+app.add_api_route(
+    "/static/uploads/{bucket}/{filename:path}",
+    media_routes.serve_upload,
+    methods=["GET", "HEAD"],
+    include_in_schema=False,
+    name="gated_upload",
 )
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
