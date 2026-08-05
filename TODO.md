@@ -954,7 +954,7 @@ Shipped — `Playlist` + `PlaylistTrack` models + campaign playlist endpoints (`
 ## Player Features
 
 ### User Presence on the Tabletop ✅ (core shipped v2.9.1)
-Core shipped — `realtime.py` broadcasts `presence_update` on connect/disconnect + the tabletop renders live presence pills (`_renderPresence`). See [`TODONE.md`](TODONE.md) → Player Features. *Remaining stretch:* Google-Docs-style cursor / hovered-token presence + an amber idle state.
+Core shipped — `realtime.py` broadcasts `presence_update` on connect/disconnect + the tabletop renders live presence pills (`_renderPresence`). See [`TODONE.md`](TODONE.md) → Player Features. ✅ **Idle state shipped v2.1044.0** ("The Empty Chair"): the hub stamps each presence row with `idle` + `idle_seconds` and the payload with `idle_after_seconds` (`PRESENCE_IDLE_AFTER_SECONDS`, 300 s); the client pings `{"type":"activity"}` on throttled real interaction and ages the clock forward locally, so a quiet seat dims to a hollow amber dot with no server sweeper task. Harness: `test_presence_idle.py` (4). *Remaining stretch:* Google-Docs-style cursor / hovered-token presence.
 
 ---
 

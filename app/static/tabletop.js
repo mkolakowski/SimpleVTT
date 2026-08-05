@@ -7088,6 +7088,34 @@
     }
     connectWs();
 
+    /* v2.1044.0 — presence idle signal. The hub marks a connection idle
+     * when it stops hearing from us, so we ping on genuine interaction.
+     * Throttled to once per PING_EVERY_MS (well under the server's
+     * 300 s threshold) so a player scrubbing the map doesn't spray
+     * frames — an active seat costs at most one tiny frame a minute.
+     *
+     * Passive + capture listeners so nothing here can interfere with
+     * map dragging, and a readyState guard so a ping during a reconnect
+     * gap is silently dropped rather than throwing. */
+    (function wireActivityPing() {
+        const PING_EVERY_MS = 60000;
+        let lastPing = 0;
+        function _pingActivity() {
+            const now = Date.now();
+            if (now - lastPing < PING_EVERY_MS) return;
+            if (!ws || ws.readyState !== WebSocket.OPEN) return;
+            lastPing = now;
+            try { ws.send(JSON.stringify({ type: 'activity' })); } catch (_) {}
+        }
+        ['pointerdown', 'keydown', 'wheel'].forEach(evt => {
+            document.addEventListener(evt, _pingActivity, { passive: true, capture: true });
+        });
+        // Coming back to the tab counts as being at the table again.
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden) _pingActivity();
+        });
+    })();
+
     // v2.115.0 — wire reroll buttons on the server-rendered roll
     // history (past rolls present at page load). Live WS rolls get
     // wired in appendRoll; these pre-rendered cards carry data-roll-id
@@ -8578,11 +8606,37 @@
      * green for player, amber for GM. Display-only — clicks pass
      * through to the canvas via pointer-events:none on the container
      * (individual pills re-enable to surface a hover title with the
-     * user_id). */
+     * user_id).
+     *
+     * v2.1044.0 — idle state. The server stamps each user with the age
+     * of their last activity (``idle_seconds``) plus the campaign-wide
+     * ``idle_after_seconds`` threshold. We cache that roster along with
+     * the wall-clock moment it arrived, then re-render on a local ticker
+     * so a seat fades to idle on its own — no server sweeper task and no
+     * periodic broadcast. The server pushes a fresh roster on the way
+     * back (idle→active), which resets the local clock. */
+    let _presenceRoster = null;      // last roster from the hub
+    let _presenceStampMs = 0;        // when it landed, for local ageing
+    let _presenceIdleAfterS = 300;   // server-provided threshold
     function _renderPresence(data) {
+        const users = (data && Array.isArray(data.users)) ? data.users : [];
+        // Only a roster straight from the hub resets the local idle
+        // clock — the ticker below repaints the SAME roster and must
+        // not re-stamp it, or ``agedS`` would snap back to 0 every tick
+        // and no seat would ever reach the threshold.
+        if (users.length) {
+            _presenceRoster = users;
+            _presenceStampMs = Date.now();
+            if (data && Number.isFinite(data.idle_after_seconds)) {
+                _presenceIdleAfterS = data.idle_after_seconds;
+            }
+        }
+        _paintPresence(users);
+    }
+
+    function _paintPresence(users) {
         const container = document.getElementById('presence-bubbles');
         if (!container) return;
-        const users = (data && Array.isArray(data.users)) ? data.users : [];
         // v2.9.2: empty roster shouldn't happen (the receiving client
         // is always in the list since they're connected), but defend
         // against a stale broadcast by keeping the server-rendered
@@ -8597,16 +8651,24 @@
             if (!!a.is_gm !== !!b.is_gm) return a.is_gm ? -1 : 1;
             return String(a.display_name || '').localeCompare(String(b.display_name || ''));
         });
+        // Age each user's idle clock forward by however long this roster
+        // has been sitting on the client, so the pills keep drifting
+        // toward idle between broadcasts.
+        const agedS = Math.max(0, (Date.now() - _presenceStampMs) / 1000);
         const html = users.map(u => {
             const name = String(u.display_name || 'Player')
                 .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
                 .replace(/"/g, '&quot;');
             const color = u.color || (u.is_gm ? '#ffa54a' : '#6cb4ff');
+            const idleS = (Number(u.idle_seconds) || 0) + agedS;
+            const isIdle = idleS >= _presenceIdleAfterS;
             const titleBits = [u.display_name || 'Player'];
             if (u.is_gm) titleBits.push('Game Master');
+            if (isIdle) titleBits.push(`idle ${Math.floor(idleS / 60)}m`);
             const title = titleBits.join(' — ').replace(/"/g, '&quot;');
             return (
-                `<span class="presence-pill${u.is_gm ? ' is-gm' : ''}" ` +
+                `<span class="presence-pill${u.is_gm ? ' is-gm' : ''}` +
+                `${isIdle ? ' is-idle' : ''}" ` +
                 `style="border-left-color:${color};" title="${title}">` +
                 `<span class="presence-dot"></span>${name}</span>`
             );
@@ -8614,6 +8676,15 @@
         container.innerHTML = html;
         container.style.display = '';
     }
+
+    /* v2.1044.0 — local idle ticker. Re-renders the cached roster so a
+     * quiet seat crosses the idle threshold without any server traffic.
+     * 20 s is fine-grained enough against a 5-minute threshold while
+     * costing one tiny DOM write per tick. */
+    setInterval(() => {
+        if (!_presenceRoster) return;
+        try { _paintPresence(_presenceRoster); } catch (_) {}
+    }, 20000);
 
     /* v2.6.1: Phase 4 Layer C — audit badge HTML for over-budget rolls.
      * Returned as a small inline element appended to the roll-card body

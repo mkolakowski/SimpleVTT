@@ -15,12 +15,21 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import time
 from collections import defaultdict
 from typing import Callable, Dict, Optional, Set
 
 from fastapi import WebSocket
 
 log = logging.getLogger(__name__)
+
+# v2.1044.0 — presence idle threshold. A connection counts as idle once
+# it has gone this long with no inbound WS traffic (the client pings on
+# real user interaction, throttled — see ``_pingActivity`` in
+# tabletop.js). Deliberately generous: a player reading a rules popover
+# or watching someone else's turn is still "here", so this is tuned to
+# flag genuinely-away seats, not brief pauses.
+PRESENCE_IDLE_AFTER_SECONDS = 300
 
 
 class CampaignHub:
@@ -33,6 +42,12 @@ class CampaignHub:
         # broadcast time so the lower-left only shows one pill per
         # human, even if they have three tabs open).
         self._identities: Dict[WebSocket, dict] = {}
+        # v2.1044.0 — per-connection last-activity stamp (monotonic
+        # seconds), fed by ``mark_active`` on every inbound WS frame.
+        # Kept in its own map rather than inside ``_identities`` so the
+        # identity dicts handed to ``recipient_filter`` stay the stable
+        # {user_id, display_name, color, is_gm} shape callers expect.
+        self._last_active: Dict[WebSocket, float] = {}
         self._lock = asyncio.Lock()
         self._battle: Dict[int, dict] = {}
         # v2.101.0 — campaigns whose battle has been hydrated from the
@@ -132,24 +147,73 @@ class CampaignHub:
     def get_presence(self, campaign_id: int) -> list[dict]:
         """Return the deduped list of users currently connected to this
         campaign's WS hub. Each entry: ``{user_id, display_name, color,
-        is_gm}``. Order isn't guaranteed; the client sorts at render
-        time for stability.
+        is_gm, idle, idle_seconds}``. Order isn't guaranteed; the client
+        sorts at render time for stability.
+
+        v2.1044.0 — ``idle_seconds`` is the age of the user's most recent
+        activity *at broadcast time*, and ``idle`` is that age measured
+        against ``PRESENCE_IDLE_AFTER_SECONDS``. The client keeps ticking
+        the age forward locally between broadcasts (see ``_renderPresence``),
+        so a seat goes amber on its own without the server having to run a
+        sweeper task or push a fresh roster on a timer.
+
+        Ages are sent as a *relative* duration rather than an absolute
+        timestamp so a client whose clock is skewed against the server
+        still renders the right thing.
         """
+        now = time.monotonic()
         seen: dict[int, dict] = {}
         for ws in self._channels.get(campaign_id, ()):
             ident = self._identities.get(ws)
             if not ident:
                 continue
             uid = ident.get("user_id")
-            if uid is None or uid in seen:
+            if uid is None:
+                continue
+            # A user is only as idle as their MOST recently active tab,
+            # so fold extra connections into the existing entry instead
+            # of skipping them (pre-v2.1044.0 this just `continue`d on a
+            # duplicate uid, which was fine when there was nothing
+            # per-connection to merge).
+            idle_seconds = max(0.0, now - self._last_active.get(ws, now))
+            prev = seen.get(uid)
+            if prev is not None:
+                if idle_seconds < prev["idle_seconds"]:
+                    prev["idle_seconds"] = round(idle_seconds, 1)
+                    prev["idle"] = idle_seconds >= PRESENCE_IDLE_AFTER_SECONDS
                 continue
             seen[uid] = {
                 "user_id": uid,
                 "display_name": ident.get("display_name") or "Player",
                 "color": ident.get("color"),
                 "is_gm": bool(ident.get("is_gm")),
+                "idle": idle_seconds >= PRESENCE_IDLE_AFTER_SECONDS,
+                "idle_seconds": round(idle_seconds, 1),
             }
         return list(seen.values())
+
+    async def mark_active(self, campaign_id: int, ws: WebSocket) -> None:
+        """v2.1044.0 — record inbound client traffic as user activity.
+
+        Called from the WS receive loop for every frame the client sends.
+        The client only pings on genuine interaction (pointer/key/wheel),
+        throttled well below the idle threshold, so this stays cheap.
+
+        Re-broadcasts the roster only when this connection was *already*
+        past the idle threshold — i.e. on the amber→green transition, so
+        the rest of the table sees someone come back. Steady-state pings
+        from an active seat cost one dict write and no broadcast.
+        """
+        now = time.monotonic()
+        async with self._lock:
+            prev = self._last_active.get(ws)
+            was_idle = (
+                prev is not None
+                and (now - prev) >= PRESENCE_IDLE_AFTER_SECONDS
+            )
+            self._last_active[ws] = now
+        if was_idle:
+            await self._broadcast_presence(campaign_id)
 
     def is_user_present(self, campaign_id: int, user_id: int) -> bool:
         """v2.99.59 — single-user presence probe.
@@ -189,6 +253,8 @@ class CampaignHub:
             self._channels[campaign_id].add(ws)
             if identity is not None:
                 self._identities[ws] = dict(identity)
+            # v2.1044.0 — a fresh connection is active by definition.
+            self._last_active[ws] = time.monotonic()
         # Send current battle state to the newly connected client
         state = self._battle.get(campaign_id)
         if state:
@@ -201,7 +267,10 @@ class CampaignHub:
         try:
             await ws.send_text(json.dumps({
                 "type": "presence_update",
-                "data": {"users": self.get_presence(campaign_id)},
+                "data": {
+                    "users": self.get_presence(campaign_id),
+                    "idle_after_seconds": PRESENCE_IDLE_AFTER_SECONDS,
+                },
             }, default=str))
         except Exception:
             pass
@@ -218,6 +287,7 @@ class CampaignHub:
             if not self._channels[campaign_id]:
                 del self._channels[campaign_id]
             self._identities.pop(ws, None)
+            self._last_active.pop(ws, None)
         await self._broadcast_presence(campaign_id)
 
     async def broadcast(
@@ -271,6 +341,7 @@ class CampaignHub:
                 for ws in dead:
                     self._channels.get(campaign_id, set()).discard(ws)
                     self._identities.pop(ws, None)
+                    self._last_active.pop(ws, None)
 
     async def _broadcast_presence(self, campaign_id: int) -> None:
         """Send the current presence roster to every connected client
@@ -279,7 +350,10 @@ class CampaignHub:
         inside broadcast since there are no recipients)."""
         await self.broadcast(campaign_id, {
             "type": "presence_update",
-            "data": {"users": self.get_presence(campaign_id)},
+            "data": {
+                "users": self.get_presence(campaign_id),
+                "idle_after_seconds": PRESENCE_IDLE_AFTER_SECONDS,
+            },
         })
 
 

@@ -80,6 +80,22 @@
         background: #ffa54a;
         box-shadow: 0 0 6px rgba(255, 165, 74, 0.7);
     }
+    /* v2.1044.0 — idle seat (no interaction for PRESENCE_IDLE_AFTER_SECONDS).
+       Declared AFTER .is-gm so an idle GM still reads as idle. The GM's
+       amber dot is solid + glowing, so idle deliberately uses a HOLLOW,
+       unglowing dot plus a dimmed pill rather than another filled amber —
+       otherwise "GM" and "idle" would be the same visual signal. */
+    .presence-pill.is-idle {
+        opacity: 0.55;
+        color: rgba(255, 255, 255, 0.72);
+    }
+    .presence-pill.is-idle .presence-dot,
+    .presence-pill.is-gm.is-idle .presence-dot {
+        box-sizing: border-box;
+        background: transparent;
+        border: 2px solid #d9a441;
+        box-shadow: none;
+    }
 
     /* ── Tabletop top bar ── */
     /* v2.91.0 — topbar is now an absolute-positioned overlay floating

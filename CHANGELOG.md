@@ -10,6 +10,37 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1044.0] - 2026-08-05 — "The Empty Chair"
+
+**Schema version:** 103
+
+**Commit summary:** Presence pills dim to an amber idle state when a seat goes quiet, closing the last core item on the presence feature.
+
+**Description:** Feature (backlog easy win — the "amber idle state" stretch filed on the v2.9.1 presence entry in `TODO.md`). The lower-left presence pills previously had exactly two states: connected or gone. A player who wandered off mid-session looked identical to one hanging on every word, which is precisely when a GM wants to know who is actually at the table.
+
+`CampaignHub` now tracks a per-connection last-activity stamp. `get_presence` folds that into each user row as `idle_seconds` (the age of their most recent activity) plus `idle` (that age measured against `PRESENCE_IDLE_AFTER_SECONDS`, 300 s), and the broadcast carries the threshold itself as `idle_after_seconds`. The WS receive loop — which until now discarded every inbound frame — feeds `hub.mark_active`, and the client pings `{"type": "activity"}` on real interaction (pointer/key/wheel, plus returning to the tab), throttled to once a minute so an active seat costs at most one tiny frame per minute.
+
+Two deliberate design choices worth recording:
+
+- **No server sweeper.** Ages are sent as a *relative* duration and the client ages them forward on a 20 s ticker, so a seat crosses the threshold locally with zero extra traffic. The server only re-broadcasts on the amber→green transition (someone coming back), which is the one edge the client cannot infer on its own. Relative durations also mean a client with a skewed clock still renders correctly.
+- **Idle is dimmed + hollow, not just amber.** The GM dot was *already* amber, so a filled amber idle dot would have made "GM" and "idle" the same visual signal. Idle instead dims the whole pill and swaps to a hollow, unglowing ring — declared after `.is-gm` so an idle GM reads as idle too.
+
+Multi-tab is honored: a user is only as idle as their most recently active tab. This required replacing `get_presence`'s old `continue`-on-duplicate-uid with a fold, so the dedupe itself is now regression-tested.
+
+### Added
+- `app/realtime.py` — `PRESENCE_IDLE_AFTER_SECONDS` (300); `CampaignHub._last_active` per-connection stamp map; `CampaignHub.mark_active()` (re-broadcasts only on the idle→active transition).
+- `app/static/tabletop.js` — throttled `_pingActivity` wiring (passive/capture listeners + `visibilitychange`); `_paintPresence` split out of `_renderPresence` so the local 20 s idle ticker repaints without re-stamping the clock; per-pill `is-idle` class + "idle Nm" title suffix.
+- `app/templates/tabletop.html` — `.presence-pill.is-idle` styling (dimmed pill, hollow amber dot, GM-safe specificity).
+- `tests/harness/test_presence_idle.py` — 4 tests: idle-field contract on the broadcast + freshly-connected GM active; activity frame accepted and keeps sender active; two tabs dedupe to one row; a non-JSON frame doesn't break the socket or drop the user from presence.
+
+### Changed
+- `app/realtime.py::get_presence` — user rows gain `idle` + `idle_seconds`; duplicate connections for one user are now folded (most-recently-active tab wins) rather than skipped. `presence_update` payloads gain `idle_after_seconds`.
+- `app/routes/tabletop_routes.py::campaign_ws` — the receive loop feeds `hub.mark_active` instead of discarding frames.
+- `TODO.md` — Player Features presence entry: idle state marked shipped; only the cursor/hovered-token stretch remains.
+- `docs/test-harness-coverage.md` — `test_presence_idle.py` catalogued. **Total re-measured to 4937** via a full `--collect-only`; the previous header (4923) was ~10 behind reality, so this is a measurement correction, not 4923+4.
+
+---
+
 ## [2.1043.2] - 2026-08-05 — "The Stale Ledger"
 
 **Schema version:** 103

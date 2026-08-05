@@ -125475,6 +125475,11 @@ async def campaign_ws(websocket: WebSocket, campaign_id: int):
     try:
         while True:
             await websocket.receive_text()
+            # v2.1044.0 — every inbound frame is an activity signal. The
+            # client only sends on genuine interaction (throttled), so
+            # this is what keeps a seat's presence pill green; going
+            # quiet past the hub's idle threshold turns it amber.
+            await hub.mark_active(campaign_id, websocket)
     except WebSocketDisconnect:
         pass
     except Exception as e:
