@@ -10,6 +10,48 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1047.5] - 2026-08-06 — "The Undisturbed Table"
+
+**Schema version:** 104
+
+**Commit summary:** Stop the demo scheduler from wiping the dataset out from under CI — it fired roughly four times during the 272-minute harness job.
+
+**Description:** Test-infrastructure fix, and the dominant cause of CI run [31070630004](https://github.com/mkolakowski/SimpleVTT/actions/runs/31070630004)'s failures.
+
+`DEMO_MODE=true` spawns an unconditional `while True: sleep(interval); reset_and_reseed()` background task (`app/demo_scheduler.py`) that **wipes and reseeds the entire demo dataset**. CI needs `DEMO_MODE` because the suite's assertions reference the seeded PCs by name — but it left `DEMO_RESET_INTERVAL_MINUTES` at 60 while the `harness` job runs **272 minutes**. So roughly **four full dataset wipes fired while tests were executing**.
+
+**This was verified, not inferred.** The first read was a correlation across job durations, which is suggestive but not proof. So the mechanism was reproduced locally at the 5-minute minimum with two planted markers:
+
+- An uploaded map named `reset-probe` — **gone** after the reset.
+- Thalindra's token — **id 10371 → 10430**, position **(700,100) → (420,560)**.
+
+The scheduler's own log line accounts for the scale: `{'users': 7, 'campaign': 6, 'characters': 15, 'tokens': 14, 'map': 1, …}`. Each of those maps onto a failure cluster seen in CI:
+
+| Reset effect | CI symptom |
+|---|---|
+| Token rows recreated with new ids | `"Token not found"` 404s (9 errors in `test_battle_*`) |
+| Tokens reseeded to different coordinates | `assert 307.1 == 350.0`, `332.1 == 350.0`, `32.1 == 50.0` |
+| 7 user rows recreated | `{"detail":"Login required"}` 401s mid-suite |
+| Characters/HP/buffs reseeded | "no damaging hit landed in N tries", buff-leak assertions |
+
+**The fix is env-only:** `DEMO_RESET_INTERVAL_MINUTES=1440` in all four jobs. `config.py` clamps the value to `[5, 1440]`, so there is no true off-switch — 1440 (24h) is the maximum and means "never" for any plausible run. `DEMO_RESET_ON_BOOT=true` is deliberately kept, so each job still starts from a freshly-seeded dataset; the scheduler is what had to go, not the seed.
+
+Three guards ship with it, because this is exactly the kind of env value that reopens silently when a job is copy-pasted: the interval must be ≥ 720 in every `DEMO_MODE` block (negative-controlled — reverting one block to 60 fails the test), `DEMO_RESET_ON_BOOT` must stay on, and the value must stay **within** the clamp, since a well-meaning `99999` would be silently rewritten to 1440 — leaving the workflow *looking* fixed while the scheduler still fired.
+
+**What this does and doesn't fix.** It should clear the bulk of the `harness` job's 44 failures, but that's a prediction until CI is re-run, not a claim. It does nothing for the `encounter-sim` roll-log cluster or the remaining `harness-ui` snapshot drift — both of those jobs are short enough that no reset ever fired, so their failures were always something else.
+
+### Added
+- `tests/harness/test_ci_env_invariants.py` — +3 tests: the reset-interval invariant, `DEMO_RESET_ON_BOOT` retention, and the within-the-clamp check.
+
+### Fixed
+- `.github/workflows/test-harness.yml` — `DEMO_RESET_INTERVAL_MINUTES=1440` in all four jobs' `.env` heredocs, with a comment recording the failure mode and why the boot seed is kept.
+
+### Changed
+- `tests/harness/test_ci_uploads_enabled.py` → **`tests/harness/test_ci_env_invariants.py`** (`git mv`, history preserved). The file now covers two CI env invariants of the same shape rather than uploads alone; its module docstring documents both.
+- `docs/test-harness-coverage.md` — section renamed + a second sub-table; harness total 4986 → **4989**.
+
+---
+
 ## [2.1047.4] - 2026-08-06 — "The Local Press"
 
 **Schema version:** 104

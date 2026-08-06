@@ -61,7 +61,17 @@ jobs:
           KEEP_DAILY=7
           KEEP_WEEKLY=4
           DEMO_MODE=true
-          DEMO_RESET_INTERVAL_MINUTES=60
+          # v2.1047.5 — 1440 (the clamp's maximum, i.e. 24h) means "never"
+          # for any CI run. DEMO_MODE spawns an unconditional
+          # `while True: sleep(interval); reset_and_reseed()` scheduler that
+          # WIPES AND RESEEDS the dataset. At the previous 60 the harness job
+          # — 272 minutes in run 31070630004 — took roughly four full wipes
+          # mid-suite, which is why it failed with tokens vanishing
+          # ("Token not found"), distances measured from reseeded positions,
+          # sessions 401ing after users were recreated, and buffs/HP resetting
+          # under running tests. DEMO_RESET_ON_BOOT below still gives each job
+          # the fresh seed its assertions depend on.
+          DEMO_RESET_INTERVAL_MINUTES=1440
           DEMO_RESET_ON_BOOT=true
           DEMO_CREDENTIALS_VISIBLE=true
           # v2.1047.1 — DEMO_DISABLE_UPLOADS defaults to TRUE in
@@ -212,7 +222,17 @@ jobs:
           KEEP_DAILY=7
           KEEP_WEEKLY=4
           DEMO_MODE=true
-          DEMO_RESET_INTERVAL_MINUTES=60
+          # v2.1047.5 — 1440 (the clamp's maximum, i.e. 24h) means "never"
+          # for any CI run. DEMO_MODE spawns an unconditional
+          # `while True: sleep(interval); reset_and_reseed()` scheduler that
+          # WIPES AND RESEEDS the dataset. At the previous 60 the harness job
+          # — 272 minutes in run 31070630004 — took roughly four full wipes
+          # mid-suite, which is why it failed with tokens vanishing
+          # ("Token not found"), distances measured from reseeded positions,
+          # sessions 401ing after users were recreated, and buffs/HP resetting
+          # under running tests. DEMO_RESET_ON_BOOT below still gives each job
+          # the fresh seed its assertions depend on.
+          DEMO_RESET_INTERVAL_MINUTES=1440
           DEMO_RESET_ON_BOOT=true
           DEMO_CREDENTIALS_VISIBLE=true
           # v2.1047.1 — DEMO_DISABLE_UPLOADS defaults to TRUE in
@@ -348,7 +368,17 @@ jobs:
           KEEP_DAILY=7
           KEEP_WEEKLY=4
           DEMO_MODE=true
-          DEMO_RESET_INTERVAL_MINUTES=60
+          # v2.1047.5 — 1440 (the clamp's maximum, i.e. 24h) means "never"
+          # for any CI run. DEMO_MODE spawns an unconditional
+          # `while True: sleep(interval); reset_and_reseed()` scheduler that
+          # WIPES AND RESEEDS the dataset. At the previous 60 the harness job
+          # — 272 minutes in run 31070630004 — took roughly four full wipes
+          # mid-suite, which is why it failed with tokens vanishing
+          # ("Token not found"), distances measured from reseeded positions,
+          # sessions 401ing after users were recreated, and buffs/HP resetting
+          # under running tests. DEMO_RESET_ON_BOOT below still gives each job
+          # the fresh seed its assertions depend on.
+          DEMO_RESET_INTERVAL_MINUTES=1440
           DEMO_RESET_ON_BOOT=true
           DEMO_CREDENTIALS_VISIBLE=true
           # v2.1047.1 — DEMO_DISABLE_UPLOADS defaults to TRUE in
@@ -497,7 +527,17 @@ jobs:
           KEEP_DAILY=7
           KEEP_WEEKLY=4
           DEMO_MODE=true
-          DEMO_RESET_INTERVAL_MINUTES=60
+          # v2.1047.5 — 1440 (the clamp's maximum, i.e. 24h) means "never"
+          # for any CI run. DEMO_MODE spawns an unconditional
+          # `while True: sleep(interval); reset_and_reseed()` scheduler that
+          # WIPES AND RESEEDS the dataset. At the previous 60 the harness job
+          # — 272 minutes in run 31070630004 — took roughly four full wipes
+          # mid-suite, which is why it failed with tokens vanishing
+          # ("Token not found"), distances measured from reseeded positions,
+          # sessions 401ing after users were recreated, and buffs/HP resetting
+          # under running tests. DEMO_RESET_ON_BOOT below still gives each job
+          # the fresh seed its assertions depend on.
+          DEMO_RESET_INTERVAL_MINUTES=1440
           DEMO_RESET_ON_BOOT=true
           DEMO_CREDENTIALS_VISIBLE=true
           # v2.1047.1 — DEMO_DISABLE_UPLOADS defaults to TRUE in
