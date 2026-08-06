@@ -10,6 +10,36 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1047.6] - 2026-08-06 — "The Third Gate"
+
+**Schema version:** 104
+
+**Commit summary:** `ensure_token_at` also waives the opportunity-attack gate — v2.1047.3 missed it and turned one CI failure into six.
+
+**Description:** Fixes a regression I introduced in v2.1047.3, caught by CI re-run [31126181450](https://github.com/mkolakowski/SimpleVTT/actions/runs/31126181450). `spell-catalog` went from **1 failure to 6 errors**.
+
+v2.1047.3 made the range suites' setup reposition assert that it succeeded, instead of firing and forgetting. That was right — but the helper only waived **one** of `move_token`'s 409 gates. There are three that a GM does *not* bypass, and I accounted for two:
+
+| Gate | GM bypass? | Waived by |
+|---|---|---|
+| `movement_locked` | ✅ yes | — |
+| off-turn / active-combatant check | ✅ yes | — |
+| `over_speed_cap` | ❌ no | `over_speed_confirmed` ✅ |
+| `oa_confirmation_required` | ❌ no | `oa_confirmed` ❌ **missed** |
+
+So when Thalindra's setup move left a watcher's reach, the move 409'd with `oa_confirmation_required`, the new assertion correctly refused to continue, and five tests that had previously *passed* — because they don't depend on the exact origin, unlike `test_out_of_range_409` — now failed in setup.
+
+Worth being precise about what changed and what didn't: the move was **already failing** before v2.1047.3; the assertion only made it visible. The regression is in test outcomes (1 → 6), not in behavior. And the new failure names its own cause — `setup reposition of token 207 to (100, 100) failed: 409 {"error":"oa_confirmation_required"…}` — rather than surfacing as an unexplained `assert 307.1 == 350.0` a hundred lines later. That is the diagnosis the old fire-and-forget code was hiding.
+
+Setup movement is bookkeeping, not a tactical decision, so waiving both player-facing confirmations is correct here.
+
+**Verification caveat, stated plainly:** I could not reproduce the OA trigger locally — it needs an active battle with the moved token as the active combatant *and* a hostile watcher in reach, which CI had and my stack did not. The waiver is therefore verified by source inspection (`if oa_triggers and not bool(body.get("oa_confirmed"))` — a single boolean check with no other conditions) plus all 16 range tests still passing locally, **not** by reproducing the 409. The next CI run is the real confirmation.
+
+### Fixed
+- `tests/harness/helpers.py` — `ensure_token_at` sends `oa_confirmed: true` alongside `over_speed_confirmed: true`, with a comment enumerating all four gates and which ones bypass for the GM, so the next person doesn't have to rediscover the list.
+
+---
+
 ## [2.1047.5] - 2026-08-06 — "The Undisturbed Table"
 
 **Schema version:** 104

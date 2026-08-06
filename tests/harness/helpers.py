@@ -196,7 +196,21 @@ async def ensure_token_at(
 
     moved = await gm_client.post(
         f"/api/campaign/{campaign_id}/token/{tok['id']}/move",
-        json={"x": x, "y": y, "over_speed_confirmed": True},
+        json={
+            "x": x, "y": y,
+            # move_token has THREE independent 409 gates that a GM does not
+            # bypass. Setup movement is bookkeeping, not a tactical
+            # decision, so all of them are waived here:
+            #   over_speed_cap          — the movement budget
+            #   oa_confirmation_required — leaving an enemy's reach
+            # (movement_locked and the off-turn check DO bypass for the GM.)
+            # Missing `oa_confirmed` is what turned v2.1047.3's 1 failure
+            # into 6 errors in CI run 31126181450: the assertion correctly
+            # refused to proceed on a failed move, but the move was failing
+            # for a gate the helper hadn't waived.
+            "over_speed_confirmed": True,
+            "oa_confirmed": True,
+        },
     )
     assert moved.status_code == 200, (
         f"setup reposition of token {tok['id']} to ({x}, {y}) failed: "
