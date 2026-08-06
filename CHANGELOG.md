@@ -10,6 +10,37 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1047.7] - 2026-08-06 — "The Roll Call"
+
+**Schema version:** 104
+
+**Commit summary:** The battle-targeting fixtures check a combatant's token still exists before trying to move it — the hub's battle state can point at tokens that are gone.
+
+**Description:** Test-isolation fix for the largest single failure cluster in CI run [31126181450](https://github.com/mkolakowski/SimpleVTT/actions/runs/31126181450): **9 errors**, every test in `test_battle_line_targets` and `test_battle_sphere_cone_targets`, all dying in setup on `Move token 1 → (…) failed: 404 {"detail":"Token not found"}`.
+
+The fixtures were not hardcoding an id — they read `source_token_id` off the live battle state, which is the right instinct. The problem is upstream: **the realtime hub's battle state is in-memory, and nothing prunes a combatant when its token row disappears.** So the two drift. In CI the state was still advertising token `1` while the DB's tokens were a different generation entirely, and the fixture faithfully tried to move a token that no longer existed.
+
+The fix is to stop trusting `source_token_id` on its own: `helpers.live_token_ids()` reads the campaign's actual token ids, and both fixtures intersect against it before picking their four combatants.
+
+**Verified by simulation, since the drift can't be reproduced on a healthy stack.** Locally every `source_token_id` matches a live token, so the bug is invisible here. Feeding the filter a deliberately-empty "live" set shows the two behaviors clearly:
+
+| live set | old logic | new logic |
+|---|---|---|
+| real (healthy) | 4 picks | **4 picks** — no-op, behavior unchanged |
+| empty (fully stale) | 4 picks → then 404s on the move | **0 picks** → fixture asserts, naming the drift |
+
+Plus all 9 tests still pass locally. In CI, only the *first* pick was stale (the error was always "Move token 1"), so skipping stale entries should let the fixtures select four live combatants and the tests pass outright. If a future run ever finds *nothing* live, the failure now says so instead of surfacing as a mystery 404.
+
+**What this deliberately does not fix.** The underlying drift — a hub battle state that outlives the tokens it references — is arguably a product concern rather than a test one: nothing prunes a combatant whose token was deleted, which could equally confuse a real client mid-session. That is filed, not fixed here; this commit makes the harness resilient to it rather than papering over it silently.
+
+### Added
+- `tests/harness/helpers.py` — `live_token_ids()`, documenting the hub-vs-DB drift and why callers must intersect against it.
+
+### Fixed
+- `tests/harness/test_battle_line_targets.py`, `test_battle_sphere_cone_targets.py` — `positioned_combatants` filters picks by live token id; both assertion messages now name the stale-state cause instead of suggesting a container restart.
+
+---
+
 ## [2.1047.6] - 2026-08-06 — "The Third Gate"
 
 **Schema version:** 104

@@ -1009,6 +1009,26 @@ Output: a `CREDITS.md` file at the repo root listing every third-party asset, it
 
 > **Bugs moved to [`BUGS.md`](BUGS.md).** The skull-overlay CI emoji-font skip (B1) and the Garrik-not-tokenized encounter-sim skips (B2) now live in the bug tracker with their repro + fix paths. This section is kept for non-bug test-infra *features* if any are filed later.
 
+### 🔴 Cross-test state pollution in the harness suite (CI run 31126181450)
+
+**The real reason CI is red**, established by running the full suite twice (31070630004 → 31126181450). Fixing the mid-run demo reset (v2.1047.5) moved the needle only **−3** — it explained the `"Login required"` 401 cluster (5 → 1) but **not** the two larger ones, which were unchanged:
+
+| Cluster | Count | Status |
+|---|---|---|
+| `"Token not found"` 404s | 9 → 0 | ✅ fixed v2.1047.7 (hub battle state vs live tokens) |
+| "no damaging hit in N tries" | 11 → 11 | 🔴 **open** — attacks never connect; likely one upstream test leaving a combatant in a state where hits can't land |
+| Buff leakage (`aura_of_courage`, `aura_of_devotion`, `break_on_damage`, `use_rage`) | ~5 | 🔴 open |
+| Misc one-offs (`slippery_mind`, `stats_api`, `attune_cap`, `buff_attack_hooks` 500) | ~8 | 🔴 open — some may be genuine product bugs, not pollution |
+
+Two structural findings worth keeping:
+
+1. **The demo reset was masking as well as causing.** With the wipe gone, `test_demo_tokens_are_grid_aligned` started failing on tokens parked at `(100,100)` — off the 70 px grid — by the range fixtures. The periodic wipe used to tidy up before the alignment check ran. Expect more of this as other state stops being periodically laundered.
+2. **The pattern is fixtures trusting shared state they didn't establish.** Three separate instances so far: `thalindra_with_token` not verifying its move (v2.1047.3), `ensure_token_at` missing a 409 gate (v2.1047.6), `positioned_combatants` trusting a stale `source_token_id` (v2.1047.7). A sweep for other fixtures that read-then-assume is probably higher yield than chasing failures one at a time.
+
+**Also filed (product, not test):** the realtime hub's battle state keeps combatants whose `source_token_id` no longer exists — nothing prunes on token delete. Harmless-ish for the harness now that it filters, but a real client mid-session would hit the same dangling reference.
+
+*Runtime note:* the `harness` job takes ~4h (269 min → 236 min post-reset-fix) for 4989 serial tests. `pytest-xdist` is contemplated in [`docs/plans/test-harness.md`](docs/plans/test-harness.md) and would make CI usable as a routine gate rather than an occasional event.
+
 ---
 
 ## Integrations

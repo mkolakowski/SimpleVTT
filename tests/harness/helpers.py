@@ -225,6 +225,26 @@ async def ensure_token_at(
     return fresh
 
 
+async def live_token_ids(gm_client, campaign_id) -> set:
+    """Token ids that actually exist in the DB right now.
+
+    v2.1047.7. The realtime hub's battle state is in-memory and holds a
+    ``source_token_id`` per combatant. Nothing prunes a combatant when
+    its token row goes away, so the two drift: CI run 31126181450 had
+    the battle state pointing at token **1** while the DB's tokens were
+    a different generation entirely, and every fixture that trusted
+    ``source_token_id`` died in setup with
+    ``404 {"detail":"Token not found"}`` (9 errors across
+    ``test_battle_line_targets`` + ``test_battle_sphere_cone_targets``).
+
+    Callers should intersect the battle state's ids with this set rather
+    than assuming a combatant's token is still real.
+    """
+    r = await gm_client.get(f"/api/campaign/{campaign_id}/tokens")
+    assert r.status_code == 200, f"token list failed: {r.text}"
+    return {t["id"] for t in r.json()["tokens"] if t.get("id") is not None}
+
+
 async def reset_battle_state(client: httpx.AsyncClient, campaign_id: int) -> None:
     """Best-effort reset of the realtime hub's battle state for a
     campaign — calls Start Initiative which clears every combatant's

@@ -12,6 +12,7 @@ then restore positions in teardown.
 import pytest_asyncio
 
 from .conftest import CAMPAIGN_ID
+from .helpers import live_token_ids
 
 
 async def _move_token(gm_client, token_id, x, y):
@@ -48,13 +49,24 @@ async def positioned_combatants(gm_client):
     combatants = state.get("combatants") or []
     # Pick 4 distinct combatants that have source_token_id set (every
     # seeded combatant should). Order is not important; we just need 4.
+    # v2.1047.7 — the hub's battle state is in-memory and nothing prunes a
+    # combatant when its token row disappears, so ``source_token_id`` can
+    # point at a token that no longer exists. CI run 31126181450 had the
+    # state referencing token 1 while the DB held a different generation
+    # entirely, and all of this file's tests died in setup on
+    # ``404 {"detail":"Token not found"}``. Intersect with the live token
+    # ids so we only pick combatants whose tokens are actually real.
+    live = await live_token_ids(gm_client, CAMPAIGN_ID)
     picks = [
         c for c in combatants
         if isinstance(c, dict) and c.get("source_token_id") and c.get("id")
+        and c["source_token_id"] in live
     ][:4]
     assert len(picks) >= 4, (
-        f"Need 4 seeded combatants with source_token_id; got "
-        f"{len(picks)}. Restart the container to refresh the seed."
+        f"Need 4 seeded combatants whose source_token_id still exists in "
+        f"the DB; got {len(picks)} of {len(combatants)} combatants. Either "
+        f"the seed is missing or the hub's battle state has gone stale "
+        f"against the tokens table — restart the container to refresh both."
     )
     a, b, c, d = picks[:4]
 
