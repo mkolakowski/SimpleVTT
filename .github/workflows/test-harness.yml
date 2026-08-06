@@ -64,6 +64,16 @@ jobs:
           DEMO_RESET_INTERVAL_MINUTES=60
           DEMO_RESET_ON_BOOT=true
           DEMO_CREDENTIALS_VISIBLE=true
+          # v2.1047.1 — DEMO_DISABLE_UPLOADS defaults to TRUE in
+          # docker-compose.yml whenever DEMO_MODE is on, which made every
+          # upload endpoint answer 403 "Uploads are disabled on this demo
+          # instance". CI needs the demo seed (DEMO_MODE=true) but must
+          # still exercise the upload contracts, so the two are decoupled
+          # here. The guard itself stays covered: the route-introspection
+          # sweep in test_demo_disable_uploads.py asserts every upload
+          # endpoint carries require_uploads_enabled regardless of config,
+          # and its HTTP test accepts either 200 or 403.
+          DEMO_DISABLE_UPLOADS=false
           # v2.49.12: TEST_MODE mounts /api/test/dice/seed so the
           # dice-seeding harness test can flip the RNG deterministic
           # mid-run. Stays off outside CI.
@@ -205,6 +215,16 @@ jobs:
           DEMO_RESET_INTERVAL_MINUTES=60
           DEMO_RESET_ON_BOOT=true
           DEMO_CREDENTIALS_VISIBLE=true
+          # v2.1047.1 — DEMO_DISABLE_UPLOADS defaults to TRUE in
+          # docker-compose.yml whenever DEMO_MODE is on, which made every
+          # upload endpoint answer 403 "Uploads are disabled on this demo
+          # instance". CI needs the demo seed (DEMO_MODE=true) but must
+          # still exercise the upload contracts, so the two are decoupled
+          # here. The guard itself stays covered: the route-introspection
+          # sweep in test_demo_disable_uploads.py asserts every upload
+          # endpoint carries require_uploads_enabled regardless of config,
+          # and its HTTP test accepts either 200 or 403.
+          DEMO_DISABLE_UPLOADS=false
           TEST_MODE=true
           EOF
 
@@ -331,6 +351,16 @@ jobs:
           DEMO_RESET_INTERVAL_MINUTES=60
           DEMO_RESET_ON_BOOT=true
           DEMO_CREDENTIALS_VISIBLE=true
+          # v2.1047.1 — DEMO_DISABLE_UPLOADS defaults to TRUE in
+          # docker-compose.yml whenever DEMO_MODE is on, which made every
+          # upload endpoint answer 403 "Uploads are disabled on this demo
+          # instance". CI needs the demo seed (DEMO_MODE=true) but must
+          # still exercise the upload contracts, so the two are decoupled
+          # here. The guard itself stays covered: the route-introspection
+          # sweep in test_demo_disable_uploads.py asserts every upload
+          # endpoint carries require_uploads_enabled regardless of config,
+          # and its HTTP test accepts either 200 or 403.
+          DEMO_DISABLE_UPLOADS=false
           EOF
 
       - name: Build and start stack
@@ -470,6 +500,16 @@ jobs:
           DEMO_RESET_INTERVAL_MINUTES=60
           DEMO_RESET_ON_BOOT=true
           DEMO_CREDENTIALS_VISIBLE=true
+          # v2.1047.1 — DEMO_DISABLE_UPLOADS defaults to TRUE in
+          # docker-compose.yml whenever DEMO_MODE is on, which made every
+          # upload endpoint answer 403 "Uploads are disabled on this demo
+          # instance". CI needs the demo seed (DEMO_MODE=true) but must
+          # still exercise the upload contracts, so the two are decoupled
+          # here. The guard itself stays covered: the route-introspection
+          # sweep in test_demo_disable_uploads.py asserts every upload
+          # endpoint carries require_uploads_enabled regardless of config,
+          # and its HTTP test accepts either 200 or 403.
+          DEMO_DISABLE_UPLOADS=false
           TEST_MODE=true
           EOF
 

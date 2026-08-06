@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1047.1] - 2026-08-06 — "The Unlocked Turnstile"
+
+**Schema version:** 104
+
+**Commit summary:** CI actually runs the upload tests — all four jobs were 403-ing past every upload endpoint.
+
+**Description:** Test-infrastructure fix (found while shipping v2.1045.0–v2.1047.0, where the same condition kept surfacing locally). `docker-compose.yml` defaults `DEMO_DISABLE_UPLOADS` to **true** (`${DEMO_DISABLE_UPLOADS:-true}`), and the gate fires whenever that *and* `DEMO_MODE` are on. The harness workflow needs `DEMO_MODE=true` for the seeded demo PCs its assertions depend on — and never set `DEMO_DISABLE_UPLOADS`. So in all four CI jobs (`harness`, `spell-catalog`, `harness-ui`, `encounter-sim`) every upload endpoint answered `403 "Uploads are disabled on this demo instance"`.
+
+That silently voided a real slice of the regression gate: **9 harness files post multipart uploads** — handouts, handout documents, the media gate, bulk map upload, encounter background, map grid / token scale / weather / letterbox, campaign export — plus two admin-center storage tests. Including all three commits shipped immediately before this one.
+
+Disabling the demo lockdown in CI does **not** stop CI from testing the lockdown, which is the obvious objection: `test_demo_disable_uploads.py::test_all_upload_endpoints_carry_the_guard` is pure route introspection and config-independent, and its live HTTP test deliberately accepts either 200 or 403 so it exercises the wiring under either configuration.
+
+**A note on how the new test was validated,** because it is the sort of guard that can quietly not work: the first draft's heredoc parser matched a bare trailing `EOF`, but the workflow uses a *quoted* delimiter (`cat > .env <<'EOF'`), so it found **zero** env blocks and the invariant passed vacuously against an unfixed workflow. The `test_demo_mode_env_blocks_exist` "guard the guard" assertion is what caught that, and the fixed invariant was then confirmed by negative control — removing one `DEMO_DISABLE_UPLOADS=false` line makes it fail with the offending block count.
+
+### Added
+- `tests/harness/test_ci_uploads_enabled.py` — 4 config-parsing tests (no HTTP, in the spirit of `test_fail2ban_compose_service.py`): the `DEMO_MODE` → `DEMO_DISABLE_UPLOADS=false` invariant; the guard-the-guard block count; the workflow parses as YAML and has jobs; compose still defaults the demo lockdown on (the premise the CI override rests on).
+
+### Changed
+- `.github/workflows/test-harness.yml` — `DEMO_DISABLE_UPLOADS=false` added to all four jobs' `.env` heredocs, with a comment recording why `DEMO_MODE` and the upload lockdown are decoupled in CI and where the guard's own coverage lives.
+- `docs/test-harness-coverage.md` — new `test_ci_uploads_enabled.py` section; harness total 4973 → **4977**.
+
+---
+
 ## [2.1047.0] - 2026-08-05 — "The Closed Stacks"
 
 **Schema version:** 104
