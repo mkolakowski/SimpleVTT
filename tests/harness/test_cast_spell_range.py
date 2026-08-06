@@ -23,6 +23,7 @@ paths fire. The GM bypass test uses gm_client.
 import pytest_asyncio
 
 from .conftest import CAMPAIGN_ID
+from .helpers import ensure_token_at
 
 
 # Thalindra's spells (v2.49.58 appended Sleep at the end):
@@ -41,6 +42,11 @@ async def thalindra_with_token(gm_client, roster):
     Returns (character_dict, token_dict). The fixture is GM-driven
     because POST /tokens + token-place are GM-only; the cast itself
     runs as bob_client so the range gate actually fires.
+
+    v2.1047.3: the reposition goes through ``ensure_token_at``, which
+    waives the over-speed gate and *asserts* the token landed. It used
+    to be fire-and-forget, so a leftover battle 409'd the move and the
+    range math below silently measured from the wrong origin.
     """
     thalindra = roster["Thalindra Moonwhisper"]
     # Long-rest to refill slots.
@@ -48,25 +54,8 @@ async def thalindra_with_token(gm_client, roster):
         f"/api/campaign/{CAMPAIGN_ID}/character/{thalindra['id']}/rest",
         json={"type": "long"},
     )
-    r = await gm_client.get(f"/api/campaign/{CAMPAIGN_ID}/tokens")
-    by_char = {t.get("character_id"): t for t in r.json()["tokens"]
-               if t.get("character_id")}
-    th_tok = by_char.get(thalindra["id"])
-    if not th_tok:
-        # Place a token if missing.
-        await gm_client.post(
-            f"/api/campaign/{CAMPAIGN_ID}/character/{thalindra['id']}/place-token",
-            json={"x": 100, "y": 100},
-        )
-        r = await gm_client.get(f"/api/campaign/{CAMPAIGN_ID}/tokens")
-        by_char = {t.get("character_id"): t for t in r.json()["tokens"]
-                   if t.get("character_id")}
-        th_tok = by_char[thalindra["id"]]
-    # Move to known starting position.
-    await gm_client.post(
-        f"/api/campaign/{CAMPAIGN_ID}/token/{th_tok['id']}/move",
-        json={"x": 100, "y": 100},
-    )
+    th_tok = await ensure_token_at(
+        gm_client, CAMPAIGN_ID, thalindra["id"], 100, 100)
     return thalindra, th_tok
 
 

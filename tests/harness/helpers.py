@@ -148,6 +148,69 @@ async def open_ws(client: httpx.AsyncClient, campaign_id: int) -> websockets.Web
     )
 
 
+async def ensure_token_at(
+    gm_client: httpx.AsyncClient, campaign_id: int, char_id: int,
+    x: float, y: float,
+) -> dict:
+    """Put ``char_id``'s token at exactly ``(x, y)`` and **prove it landed**.
+
+    v2.1047.3. The range-gate suites derive an expected `distance_ft`
+    from a token they believe is at a known origin, so a reposition that
+    silently fails turns into a baffling arithmetic assertion 200 lines
+    later (CI run 31070630004: ``assert 307.1 == 350.0``,
+    ``assert 332.1 == 350.0``, ``assert 32.1 == 50.0`` — all three were
+    the same unnoticed no-op move).
+
+    Two things every caller was getting wrong:
+
+    - **The move can 409 and was never checked.** ``move_token``'s
+      over-speed gate fires when a battle is active *and* the moved
+      token is the active combatant — and unlike the movement-lock and
+      off-turn gates, it does **not** bypass for the GM. A leftover
+      battle therefore rejects the setup move. ``over_speed_confirmed``
+      is the documented opt-out and is always correct for setup.
+    - **The returned dict was the pre-move one**, carrying stale
+      coordinates even when the move did work.
+
+    So: place if missing, move with the gate waived, assert the call
+    succeeded, then re-read and assert the coordinates really are what
+    the caller asked for. Returns the fresh token dict.
+    """
+    async def _by_char() -> dict:
+        r = await gm_client.get(f"/api/campaign/{campaign_id}/tokens")
+        assert r.status_code == 200, f"token list failed: {r.text}"
+        return {t.get("character_id"): t for t in r.json()["tokens"]
+                if t.get("character_id")}
+
+    tok = (await _by_char()).get(char_id)
+    if not tok:
+        placed = await gm_client.post(
+            f"/api/campaign/{campaign_id}/character/{char_id}/place-token",
+            json={"x": x, "y": y},
+        )
+        assert placed.status_code == 200, (
+            f"place-token for char {char_id} failed: "
+            f"{placed.status_code} {placed.text}")
+        tok = (await _by_char()).get(char_id)
+        assert tok, f"char {char_id} still has no token after place-token"
+
+    moved = await gm_client.post(
+        f"/api/campaign/{campaign_id}/token/{tok['id']}/move",
+        json={"x": x, "y": y, "over_speed_confirmed": True},
+    )
+    assert moved.status_code == 200, (
+        f"setup reposition of token {tok['id']} to ({x}, {y}) failed: "
+        f"{moved.status_code} {moved.text} — the test's distance math "
+        f"assumes this origin, so it would fail misleadingly later")
+
+    fresh = (await _by_char()).get(char_id)
+    assert fresh, f"char {char_id}'s token vanished after the move"
+    assert (float(fresh["x"]), float(fresh["y"])) == (float(x), float(y)), (
+        f"token {tok['id']} is at ({fresh['x']}, {fresh['y']}), not the "
+        f"requested ({x}, {y}) — setup origin is not what the test assumes")
+    return fresh
+
+
 async def reset_battle_state(client: httpx.AsyncClient, campaign_id: int) -> None:
     """Best-effort reset of the realtime hub's battle state for a
     campaign — calls Start Initiative which clears every combatant's

@@ -30,6 +30,7 @@ endpoints get full 409 coverage too; filed for follow-up.
 import pytest_asyncio
 
 from .conftest import CAMPAIGN_ID
+from .helpers import ensure_token_at
 
 
 PX_PER_CELL = 70
@@ -49,24 +50,11 @@ async def _bandit_template(gm_client):
 
 async def _ensure_pc_token(gm_client, char_id: int, x: float, y: float) -> dict:
     """Place / move the PC's token to (x, y) on the active map."""
-    r = await gm_client.get(f"/api/campaign/{CAMPAIGN_ID}/tokens")
-    by_char = {t.get("character_id"): t for t in r.json()["tokens"]
-               if t.get("character_id")}
-    tok = by_char.get(char_id)
-    if not tok:
-        await gm_client.post(
-            f"/api/campaign/{CAMPAIGN_ID}/character/{char_id}/place-token",
-            json={"x": x, "y": y},
-        )
-        r = await gm_client.get(f"/api/campaign/{CAMPAIGN_ID}/tokens")
-        by_char = {t.get("character_id"): t for t in r.json()["tokens"]
-                   if t.get("character_id")}
-        tok = by_char[char_id]
-    await gm_client.post(
-        f"/api/campaign/{CAMPAIGN_ID}/token/{tok['id']}/move",
-        json={"x": x, "y": y},
-    )
-    return tok
+    # v2.1047.3 — was fire-and-forget: a leftover battle 409'd the move
+    # (the over-speed gate does not bypass for the GM) and the distance
+    # assertions then measured from a stale origin. ensure_token_at
+    # waives the gate and asserts the token actually landed.
+    return await ensure_token_at(gm_client, CAMPAIGN_ID, char_id, x, y)
 
 
 async def _place_test_npc(gm_client, x: float, y: float, tmpl_id: int,

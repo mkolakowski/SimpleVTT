@@ -24,6 +24,7 @@ fires. GM-bypass test uses gm_client.
 import pytest_asyncio
 
 from .conftest import CAMPAIGN_ID
+from .helpers import ensure_token_at
 
 # Demo Thalindra's spells (see test_cast_spell_aoe.py).
 FIREBALL_INDEX = 10  # Fireball (range 150 ft) in Thalindra's *stored* sheet.
@@ -45,23 +46,9 @@ async def thalindra_at_origin(gm_client, roster):
         f"/api/campaign/{CAMPAIGN_ID}/character/{thal['id']}/rest",
         json={"type": "long"},
     )
-    r = await gm_client.get(f"/api/campaign/{CAMPAIGN_ID}/tokens")
-    by_char = {t.get("character_id"): t for t in r.json()["tokens"]
-               if t.get("character_id")}
-    tok = by_char.get(thal["id"])
-    if not tok:
-        await gm_client.post(
-            f"/api/campaign/{CAMPAIGN_ID}/character/{thal['id']}/place-token",
-            json={"x": 100, "y": 100},
-        )
-        r = await gm_client.get(f"/api/campaign/{CAMPAIGN_ID}/tokens")
-        by_char = {t.get("character_id"): t for t in r.json()["tokens"]
-                   if t.get("character_id")}
-        tok = by_char[thal["id"]]
-    await gm_client.post(
-        f"/api/campaign/{CAMPAIGN_ID}/token/{tok['id']}/move",
-        json={"x": 100, "y": 100},
-    )
+    # v2.1047.3 — see ensure_token_at: the old fire-and-forget move
+    # could 409 against a leftover battle, leaving the AoE origin wrong.
+    await ensure_token_at(gm_client, CAMPAIGN_ID, thal["id"], 100, 100)
     return thal
 
 

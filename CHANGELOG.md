@@ -10,6 +10,34 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1047.3] - 2026-08-06 — "The Surveyor's Stake"
+
+**Schema version:** 104
+
+**Commit summary:** The three range-gate suites now prove their setup token actually landed, instead of measuring distance from wherever it happened to be.
+
+**Description:** Test-isolation fix, found by triaging CI run [31070630004](https://github.com/mkolakowski/SimpleVTT/actions/runs/31070630004) — the first run after v2.1047.1 made the upload tests actually execute.
+
+`test_cast_spell_range`, `test_cast_attack_range`, and `test_place_aoe_range` all derive an expected `distance_ft` from a PC token they believe sits at a known origin. All three set that origin with a **fire-and-forget** move — no status check — so when the move failed the suites silently measured from the wrong place and failed with a baffling arithmetic assertion a hundred lines later. That is exactly what CI showed: `assert 307.1 == 350.0` (spell-catalog), `assert 332.1 == 350.0`, and `assert 32.1 == 50.0` plus a spurious in-range 409.
+
+**Why the move failed.** `move_token`'s over-speed gate fires when a battle is active *and* the token being moved is the active combatant — and unlike the movement-lock and off-turn gates immediately above it, it does **not** bypass for the GM. A battle left active by an earlier test therefore 409s the setup reposition. `over_speed_confirmed: true` is the documented opt-out and is unambiguously correct for setup.
+
+A second, quieter bug rode along: the fixtures returned the token dict fetched *before* the move, so callers got stale coordinates even when the move did work.
+
+Both are now handled in one shared `helpers.ensure_token_at()`, which places the token if missing, moves it with the gate waived, **asserts the move returned 200**, then re-reads and **asserts the coordinates are actually what was asked for** — with failure messages that name the real problem instead of leaving a distance mismatch to be reverse-engineered.
+
+**Verified in both directions** against the running container: displacing Thalindra's token to x=700 (the position CI's arithmetic implicated) reproduces `assert 307.1 == 350.0` exactly under the old fixture, and all 16 tests across the three files pass under the new one from that same displaced state.
+
+**Scope note.** This fixes 4 of the run's 45 failures. The dominant cause of the rest is separate and not addressed here: `DEMO_MODE=true` spawns a scheduler that wipes and reseeds the dataset every `DEMO_RESET_INTERVAL_MINUTES` (CI sets 60), and the `harness` job runs **272 minutes** — so roughly four full wipes fire mid-suite. The job-duration correlation is stark: `encounter-sim` (4 min) and `harness-ui` (8 min) see zero resets and fail for unrelated reasons; `spell-catalog` (53 min) sees none and had a single failure; `harness` (272 min) had 44.
+
+### Added
+- `tests/harness/helpers.py` — `ensure_token_at()`: place-if-missing, move with `over_speed_confirmed`, assert the call succeeded, re-read and assert the landed coordinates. Documents both footguns for the next author.
+
+### Fixed
+- `tests/harness/test_cast_spell_range.py`, `test_cast_attack_range.py`, `test_place_aoe_range.py` — all three setup fixtures route through `ensure_token_at` instead of an unchecked move, and no longer return a pre-move token dict. Dead token-lookup code removed with them.
+
+---
+
 ## [2.1047.2] - 2026-08-06 — "The Steady Flame"
 
 **Schema version:** 104
