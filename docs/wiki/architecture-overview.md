@@ -12,7 +12,7 @@ This page is the system map. Each subsystem has its own deep-dive guide (filed i
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                      Browser (every client)                      │
-│  Jinja2-rendered HTML  +  /static/*.js (vanilla)  +  HTMX        │
+│  Jinja2-rendered HTML  +  /static/*.js (vanilla)                 │
 │   ↑ HTTP                                            ↑ WebSocket  │
 │   │ /campaign/{id}, /api/campaign/{id}/...          │            │
 │   │                                                 │            │
@@ -39,7 +39,7 @@ All three layers ship in a single `docker compose up` — the `app` service runs
 |-------|------|-----|
 | **HTTP + WebSocket** | FastAPI 0.115 + uvicorn (with `--proxy-headers`) | Async-native, type-checked, OpenAPI for free, easy WebSocket support, one-process deploy. |
 | **HTML rendering** | Jinja2 templates (`app/templates/`) | Server-side render, no client build step, every page hydrates with the user's theme + font + version-stamped static URLs. |
-| **HTMX** | `unpkg.com/htmx.org@1.9.12` (CDN, loaded with `defer`) | Used sparingly for the homebrew CRUD + the GM tools panel. Lets us swap fragments without writing per-form JS. |
+| **Webfonts** | Self-hosted `.woff2` under `app/static/fonts/`, served by `/static/fonts.css` | Cormorant Garamond / Lora / IM Fell English (SIL OFL). Bundled since v2.1047.4 — they previously loaded from Google Fonts, which the app's own CSP blocked, so they never applied. No runtime CDN call. |
 | **Frontend JS** | Vanilla, no build step. Modules in `app/static/*.js`. | Keeps the deploy artifact = one Python image; no node_modules; debuggable in-browser with Sources tab. |
 | **Realtime** | Native `WebSocket` + per-campaign hub (`app/realtime.py`) | One process per campaign-set; fan-out via Python sets. No Redis pubsub, no clustering. |
 | **DB** | Postgres 16 via SQLAlchemy 2.0 | Single-writer, one process talking to it. JSONB columns for sheet data (`Character.sheet`), JSON columns for token data. |

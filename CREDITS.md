@@ -45,13 +45,16 @@ campaign/operator homebrew tier.
 
 ---
 
-## Frontend dependencies (loaded from CDN at runtime)
+## Frontend dependencies
 
-- **[htmx](https://htmx.org/) v1.9.12** — [BSD 2-Clause](https://github.com/bigskysoftware/htmx/blob/master/LICENSE) — loaded from `unpkg.com`
-- **[Google Fonts](https://fonts.google.com/)** — [SIL Open Font License 1.1](https://scripts.sil.org/OFL):
-  - Cormorant Garamond (headings)
-  - Lora (body)
-  - IM Fell English (fantasy theme accent)
+**Bundled in the image — no runtime CDN calls.**
+
+- **Webfonts** — [SIL Open Font License 1.1](https://scripts.sil.org/OFL), redistributed under its terms. Shipped as `.woff2` under `app/static/fonts/` and served by `app/static/fonts.css`; latin + latin-ext subsets only (~185 KB total). Self-hosted since v2.1047.4 — they previously loaded from `fonts.googleapis.com`, which the app's own Content-Security-Policy blocked, so they never actually applied.
+  - **[Cormorant Garamond](https://fonts.google.com/specimen/Cormorant+Garamond)** — Copyright © Catharsis Fonts (headings)
+  - **[Lora](https://fonts.google.com/specimen/Lora)** — Copyright © Cyreal (body)
+  - **[IM Fell English](https://fonts.google.com/specimen/IM+Fell+English)** — Copyright © Igino Marini (fantasy theme accent)
+
+- **htmx** — **removed in v2.1047.4.** It was loaded from `unpkg.com`, blocked by the app's own CSP (`script-src 'self' 'unsafe-inline'`) so it never actually loaded, and the codebase contains zero `hx-*` attributes — nothing depended on it. No replacement needed.
 
 ---
 

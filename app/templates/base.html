@@ -17,10 +17,14 @@
     <link rel="stylesheet" href="/static/style.css?v={{ APP_VERSION }}">
     <link rel="stylesheet" href="/static/style-fantasy-themes.css?v={{ APP_VERSION }}">
     <link rel="stylesheet" href="/static/sheet-fantasy.css?v={{ APP_VERSION }}">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Lora:wght@400;500;600&family=IM+Fell+English&display=swap" rel="stylesheet">
-    <script src="https://unpkg.com/htmx.org@1.9.12" defer></script>
+    {# v2.1047.4 — self-hosted webfonts. These loaded from fonts.googleapis.com
+       until now, which never worked: the app's own CSP is
+       `style-src 'self' 'unsafe-inline'` / `font-src 'self' data:` with no
+       Google origin, so the browser refused the stylesheet on every page load
+       and readers silently got the Georgia/serif fallbacks. Self-hosting keeps
+       the dependency on the internal Docker network, works offline, and drops
+       two preconnects + a blocking cross-origin request from page load. #}
+    <link rel="stylesheet" href="/static/fonts.css?v={{ APP_VERSION }}">
     {% block head %}{% endblock %}
 </head>
 <body{% if user and user.glass_alpha %} style="--glass-alpha: {{ user.glass_alpha }}%;"{% endif %}{# v2.84.0: sepia wood-grain texture opt-in class. v2.85.0 flipped the default from on → off, so the class is only emitted when the user has actively opted in via /settings (and the active theme is sepia). Unauthenticated visitors get the flat sepia color too — the texture requires a logged-in user with sepia_texture=True. v2.86.1: when an encounter background is active for a campaign in scope, ALSO emit a `has-encounter-bg` class so the matching CSS rule makes body transparent — without that, the layer's z-index:-1 paints behind body's `background: var(--bg)` rule and is invisible. #}{% set _active_theme = (user.theme if user and user.theme else APP_DEFAULT_THEME) %}{% set _body_classes = [] %}{% if _active_theme == 'sepia' and user is not none and user.sepia_texture %}{% set _ = _body_classes.append('sepia-texture-on') %}{% endif %}{% if campaign is defined and campaign and campaign.active_background_url %}{% set _ = _body_classes.append('has-encounter-bg') %}{% endif %}{% if _body_classes %} class="{{ _body_classes | join(' ') }}"{% endif %}>

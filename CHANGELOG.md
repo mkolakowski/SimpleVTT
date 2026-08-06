@@ -10,6 +10,43 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1047.4] - 2026-08-06 — "The Local Press"
+
+**Schema version:** 104
+
+**Commit summary:** Self-host the three webfonts and drop the dead htmx CDN tag — both were blocked by the app's own CSP on every single page load.
+
+**Description:** Bug fix, found triaging CI run [31070630004](https://github.com/mkolakowski/SimpleVTT/actions/runs/31070630004).
+
+The app sends `style-src 'self' 'unsafe-inline'`, `script-src 'self' 'unsafe-inline'`, `font-src 'self' data:` — no third-party origins. `base.html` was nevertheless loading webfonts from `fonts.googleapis.com` and htmx from `unpkg.com`. So **every page load in the app's entire history** logged:
+
+> Refused to load the stylesheet 'https://fonts.googleapis.com/css2?…' because it violates the following Content Security Policy directive: "style-src 'self' 'unsafe-inline'"
+
+…and the same for the htmx script. The practical consequence: **the fonts never applied.** Every reader has been seeing the `Georgia, "Times New Roman", serif` fallbacks the CSS declares after them. This is a nasty failure mode precisely because nothing breaks loudly — the server is fine, the page renders, CSS falls back, and only a browser console shows it. It surfaced because two Playwright tests assert "no console errors."
+
+**Self-hosted rather than widening the CSP.** That's the same reasoning CLAUDE.md applies to third-party APIs ("keeps every dependency on the internal Docker network, works offline, and removes runtime internet calls from the hot path") and to the shipped SRD content tier. Widening the CSP to admit Google's origins would have re-introduced a blocking cross-origin request on every page load and made the app depend on the public internet to render correctly. The three families ship as `.woff2` under `app/static/fonts/` — **latin + latin-ext only, 185 KB total across 5 files** (Cormorant Garamond and Lora are variable fonts, so one file covers all three weights each). `font-display: swap` is preserved from the upstream CSS. All three are SIL OFL 1.1; CREDITS.md now records the per-family copyright holders and that the files are redistributed under its terms.
+
+**htmx was removed rather than un-blocked.** It was equally CSP-blocked, and the codebase contains **zero** `hx-*` attributes — I grepped `hx-get|hx-post|hx-put|hx-delete|hx-patch|hx-trigger|hx-target|hx-swap|hx-vals|hx-headers` across every `.html`, `.js` and `.py` and found none. So it has never done anything; allow-listing `unpkg.com` would have added a live supply-chain dependency for a library nothing uses. `docs/wiki/architecture-overview.md` claimed it was "used sparingly for the homebrew CRUD + the GM tools panel" — that was stale, and is corrected along with the README's stack description.
+
+**The test is written against the rule, not the symptom.** Rather than assert "these two origins are absent," it reads the CSP the app actually sends, works out which directives forbid external origins, and then asserts no served page references one — so the *next* CDN tag someone adds gets caught too, whatever it is. It also verifies the premise (the CSP really is locked down) so it can't quietly pass against a widened policy.
+
+Confirmed against the running container: the two previously-failing `harness_ui` console-error tests (`test_upcast_picker_ui`, `test_invoke_duplicity_picker_ui`) now pass.
+
+### Added
+- `app/static/fonts/` — `cormorant-garamond{,-ext}.woff2`, `lora{,-ext}.woff2`, `im-fell-english.woff2` (185 KB total).
+- `app/static/fonts.css` — the `@font-face` set, generated from the Google Fonts CSS API with URLs rewritten to `/static/fonts/`, latin + latin-ext subsets only.
+- `tests/harness/test_no_blocked_external_assets.py` — 9 tests: the CSP-is-locked-down premise; a per-page scan across 6 pages for CSP-blocked subresources; fonts.css serves real `wOF2` bytes for all three families and no longer points at `fonts.gstatic.com`; the font files sit outside the gated `/static/uploads/` tree.
+
+### Fixed
+- `app/templates/base.html` — the Google Fonts `<link>` + two `<link rel="preconnect">` tags replaced by `/static/fonts.css`; the dead htmx `<script>` removed. Net: three fewer cross-origin requests per page load, and the fonts actually apply.
+
+### Changed
+- `CREDITS.md` — "Frontend dependencies (loaded from CDN at runtime)" → "Frontend dependencies / Bundled in the image — no runtime CDN calls"; per-family font copyright holders recorded; htmx entry marked removed with the reason.
+- `README.md` / `docs/wiki/architecture-overview.md` — HTMX dropped from the stack description and the architecture diagram; the doc's stale "used sparingly for the homebrew CRUD" claim replaced with the self-hosted-webfonts row.
+- `docs/test-harness-coverage.md` — new section; harness total 4977 → **4986**.
+
+---
+
 ## [2.1047.3] - 2026-08-06 — "The Surveyor's Stake"
 
 **Schema version:** 104

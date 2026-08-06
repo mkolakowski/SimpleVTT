@@ -1,8 +1,8 @@
 # SimpleVTT
 
-> Current version: **2.1047.3** · Schema: **v104** · See [CHANGELOG.md](CHANGELOG.md) for release history and the rules for bumping versions (pre-2.0.0 history archived in [CHANGELOG_v1.md](CHANGELOG_v1.md)).
+> Current version: **2.1047.4** · Schema: **v104** · See [CHANGELOG.md](CHANGELOG.md) for release history and the rules for bumping versions (pre-2.0.0 history archived in [CHANGELOG_v1.md](CHANGELOG_v1.md)).
 
-A self-hosted virtual tabletop for online TTRPG sessions. Python (FastAPI) backend with a Jinja2 + HTMX + vanilla JS frontend, PostgreSQL for storage, real-time sync over WebSockets, and Docker Compose deployment that works on both `linux/amd64` and `linux/arm64` (Raspberry Pi, Apple Silicon, etc.).
+A self-hosted virtual tabletop for online TTRPG sessions. Python (FastAPI) backend with a Jinja2 + vanilla JS frontend, PostgreSQL for storage, real-time sync over WebSockets, and Docker Compose deployment that works on both `linux/amd64` and `linux/arm64` (Raspberry Pi, Apple Silicon, etc.).
 
 ## Features
 
@@ -152,7 +152,7 @@ gunzip -c backups/daily/simplevtt-YYYYMMDDTHHMMSSZ.sql.gz \
 
 ## Architecture decisions
 
-- **FastAPI + Jinja2 + HTMX + vanilla JS canvas**: backend logic stays Python. The canvas needs imperative pixel control (token dragging, hex math) so it's a small vanilla JS file rather than a heavier framework. WebSocket broadcasting is built into FastAPI.
+- **FastAPI + Jinja2 + vanilla JS canvas**: backend logic stays Python. The canvas needs imperative pixel control (token dragging, hex math) so it's a small vanilla JS file rather than a heavier framework. WebSocket broadcasting is built into FastAPI.
 - **PostgreSQL**: relational data (users, campaigns, memberships, rolls) plus JSON columns for character sheets.
 - **Sessions over JWT**: simpler for a server-rendered app. Session cookies are signed with `APP_SECRET_KEY`.
 - **Admins by email in env**: easy to bootstrap, plays well with both local and SSO accounts.
