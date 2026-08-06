@@ -10,6 +10,40 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1047.2] - 2026-08-06 — "The Steady Flame"
+
+**Schema version:** 104
+
+**Commit summary:** An animated-GIF token stops having its `src` rewritten on every render, which was restarting the animation.
+
+**Description:** Bug fix (surfaced by the media survey run for v2.1047.0). `_updateGifOverlay` keeps one DOM `<img>` per animated-GIF token and guarded its `src` write with:
+
+```js
+if (img.src !== t.image_url) img.src = t.image_url;
+```
+
+That comparison is **always true**. The `src` *property* getter returns the resolved absolute URL (`http://host/static/uploads/tokens/x.gif`) while `t.image_url` is root-relative (`/static/uploads/tokens/x.gif`), so the two can never be equal. `src` was therefore reassigned on every call — and `_updateGifOverlay` runs at the tail of every `render()`, which has 60+ call sites: token drag, pan, zoom, and every inbound token WS update. Reassigning `src` re-runs the HTML image-update algorithm, which restarts the GIF animation, so animated tokens visibly stuttered back to frame 1 during ordinary table activity.
+
+The fix compares `img.getAttribute('src')` — the literal value we set — so the guard is stable. (`audio.js` already guards its own `src` correctly, with an `endsWith` check; the exact-attribute comparison used here avoids that form's suffix-collision edge.)
+
+**Two traps while writing the test, both of which produced a test that passed against the unfixed code** — recorded because a green vacuous test is worse than no test:
+
+- Driving renders with synthetic wheel events never reached `render()` at all. The test now drives six real token-move WS updates, which is also the path the bug actually fires on in play.
+- `locator("#vtt-canvas").hover()` fails Playwright's actionability check because the Maps 2.0 `#wall-overlay` SVG sits above the canvas.
+
+The test consequently also asserts the overlay **repositioned**, so a zero-write result can only mean the guard held rather than that the function never ran. Verified in both directions against the running container: **6 reassignments with the old guard, 0 with the fix.**
+
+### Added
+- `tests/harness_ui/test_gif_token_src_stable.py` — instruments the overlay `<img>`'s `src` setter, drives six token-move renders, and asserts zero writes; plus the attribute-vs-property premise assertions and the vacuity guard. Places and deletes its own token for Garrik Ironside (outside the demo's tokenized-six lineup) so the visual-regression snapshots are untouched. Skips when uploads are disabled.
+
+### Fixed
+- `app/static/tabletop.js` — `_updateGifOverlay` compares `getAttribute('src')` instead of the resolved `src` property, so an animated-GIF token's image is no longer reassigned (and its animation no longer restarted) on every render.
+
+### Changed
+- `docs/test-harness-coverage.md` — new UI-suite section; UI total 320 → **321**.
+
+---
+
 ## [2.1047.1] - 2026-08-06 — "The Unlocked Turnstile"
 
 **Schema version:** 104

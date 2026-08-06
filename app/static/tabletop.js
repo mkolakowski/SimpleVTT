@@ -737,7 +737,17 @@
                 _gifImgMap[t.id] = img;
             }
             const img = _gifImgMap[t.id];
-            if (img.src !== t.image_url) img.src = t.image_url;
+            // v2.1047.2 — compare the ATTRIBUTE, not the property. `img.src`
+            // returns the resolved absolute URL ("http://host/static/…") while
+            // `t.image_url` is root-relative ("/static/…"), so `img.src !==
+            // t.image_url` was always true and reassigned `src` on every call.
+            // _updateGifOverlay runs at the tail of every render() — 60+ call
+            // sites (drag, pan, zoom, every token WS update) — and reassigning
+            // src re-runs the image-update algorithm, which restarts the GIF
+            // animation. `getAttribute('src')` returns the literal value we set,
+            // so this comparison is stable. (audio.js guards the same way with
+            // an endsWith check on its own src.)
+            if (img.getAttribute('src') !== t.image_url) img.src = t.image_url;
             img.style.left    = (cx - r) + 'px';
             img.style.top     = (cy - r) + 'px';
             img.style.width   = (r * 2)  + 'px';
