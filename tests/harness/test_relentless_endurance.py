@@ -31,6 +31,7 @@ Test strategy:
 import pytest_asyncio
 
 from .conftest import CAMPAIGN_ID
+from .helpers import AttemptLog
 
 
 async def _seed_dice(gm_client, seed: int):
@@ -119,6 +120,7 @@ async def test_relentless_endurance_clamps_zero_to_one(
     # Pip attacks Krieger; loop until a hit lands.
     krieger_tok = f"tok_re_{krieger['id']}"
     hit_landed = False
+    _log = AttemptLog()
     for seed in range(1, 200):
         await _seed_dice(gm_client, seed)
         r = await gm_client.post(
@@ -130,13 +132,14 @@ async def test_relentless_endurance_clamps_zero_to_one(
                 "override": True,
             },
         )
+        _log.record(r)
         if r.status_code != 200:
             continue
         data = r.json()
         if data.get("hit") and int(data.get("damage_applied") or 0) >= 3:
             hit_landed = True
             break
-    assert hit_landed, "no hit dealing ≥3 damage landed in 200 seeds"
+    assert hit_landed, f"no hit dealing ≥3 damage landed in 200 seeds — {_log.summary()}"
 
     # Give async broadcasts a beat to land.
     import asyncio as _asy
@@ -201,6 +204,7 @@ async def test_relentless_endurance_skips_non_half_orc(
     gm_ws.mark()
     lyra_tok = f"tok_re_{lyra['id']}"
     hit_landed = False
+    _log = AttemptLog()
     for seed in range(1, 200):
         await _seed_dice(gm_client, seed)
         r = await gm_client.post(
@@ -212,13 +216,14 @@ async def test_relentless_endurance_skips_non_half_orc(
                 "override": True,
             },
         )
+        _log.record(r)
         if r.status_code != 200:
             continue
         data = r.json()
         if data.get("hit") and int(data.get("damage_applied") or 0) >= 3:
             hit_landed = True
             break
-    assert hit_landed, "no hit dealing ≥3 damage landed in 200 seeds"
+    assert hit_landed, f"no hit dealing ≥3 damage landed in 200 seeds — {_log.summary()}"
 
     import asyncio as _asy
     await _asy.sleep(0.3)

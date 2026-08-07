@@ -1016,7 +1016,8 @@ Output: a `CREDITS.md` file at the repo root listing every third-party asset, it
 | Cluster | Count | Status |
 |---|---|---|
 | `"Token not found"` 404s | 9 → 0 | ✅ fixed v2.1047.7 (hub battle state vs live tokens) |
-| "no damaging hit in N tries" | 11 → 11 | 🔴 **open** — attacks never connect; likely one upstream test leaving a combatant in a state where hits can't land |
+| "no damaging hit in N tries" | 12 | 🟠 **instrumented v2.1047.8, root cause still open.** Confirmed *pollution*, not broken tests: all 12 pass on a freshly-seeded DB and start failing once demo state is dirty — which is exactly the condition 4989 tests deep. Reproducing the specific CI trigger needs most of the suite, so `helpers.AttemptLog` now reports the status distribution + outcome spread + last non-200 body in the assertion. The next CI run should name the cause directly. |
+| ⚠️ **`TEST_MODE` gotcha** | — | Running these locally with `TEST_MODE=false` (the `.env` default) makes `_seed_dice` 404 and the tests fail at the *dice-seed assert*, not the loop — a different failure that reads like the CI one. It cost one wrong "genuinely broken" conclusion this session. Repro locally with `TEST_MODE=true docker compose up -d app`. |
 | Buff leakage (`aura_of_courage`, `aura_of_devotion`, `break_on_damage`, `use_rage`) | ~5 | 🔴 open |
 | Misc one-offs (`slippery_mind`, `stats_api`, `attune_cap`, `buff_attack_hooks` 500) | ~8 | 🔴 open — some may be genuine product bugs, not pollution |
 

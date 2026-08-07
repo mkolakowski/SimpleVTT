@@ -148,6 +148,70 @@ async def open_ws(client: httpx.AsyncClient, campaign_id: int) -> websockets.Web
     )
 
 
+class AttemptLog:
+    """Record why an attack-until-hit loop never succeeded.
+
+    v2.1047.8. A dozen tests share this shape::
+
+        for seed in range(1, 200):
+            r = await post(...)
+            if r.status_code != 200:
+                continue          # <-- the real error dies here
+            if r.json().get("hit") and damage >= N:
+                landed = True; break
+        assert landed, "no hit dealing >=N landed in 200 seeds"
+
+    When the loop exhausts, that message says only that nothing landed —
+    not *why*. CI run 31126181450 had 12 such failures and none of them
+    could be diagnosed from the report: a 409 range gate, a 400, a target
+    already at 0 HP, and "the attacker genuinely kept missing" all look
+    identical. Reproducing needed the full 4989-test suite, because the
+    cause is upstream state, and these tests pass in isolation.
+
+    So: record every attempt and put the distribution in the assertion.
+    The next failure names its own cause instead of requiring a 4-hour
+    bisect.
+    """
+
+    def __init__(self):
+        self.statuses: dict = {}
+        self.outcomes: dict = {}
+        self.last_bad: str = ""
+        self.n = 0
+
+    def record(self, resp) -> None:
+        self.n += 1
+        code = resp.status_code
+        self.statuses[code] = self.statuses.get(code, 0) + 1
+        if code != 200:
+            body = (resp.text or "")[:180]
+            self.last_bad = f"{code} {body}"
+            return
+        try:
+            d = resp.json()
+        except Exception:  # noqa: BLE001 — non-JSON 200 is itself notable
+            self.outcomes["non-json-200"] = self.outcomes.get("non-json-200", 0) + 1
+            return
+        if d.get("hit"):
+            key = f"hit dmg={d.get('damage_applied')}"
+            if d.get("target_resistance_applied"):
+                key += " (resisted)"
+            if d.get("target_immunity_applied"):
+                key += " (immune)"
+        else:
+            key = "miss"
+        self.outcomes[key] = self.outcomes.get(key, 0) + 1
+
+    def summary(self) -> str:
+        parts = [f"{self.n} attempts", f"statuses={self.statuses}"]
+        if self.outcomes:
+            top = sorted(self.outcomes.items(), key=lambda kv: -kv[1])[:6]
+            parts.append("outcomes=" + ", ".join(f"{k}x{v}" for k, v in top))
+        if self.last_bad:
+            parts.append(f"last non-200: {self.last_bad}")
+        return " | ".join(parts)
+
+
 async def ensure_token_at(
     gm_client: httpx.AsyncClient, campaign_id: int, char_id: int,
     x: float, y: float,

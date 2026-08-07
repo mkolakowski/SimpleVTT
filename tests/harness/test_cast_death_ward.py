@@ -23,6 +23,7 @@ Tests (buff-install contract + the end-to-end floor):
   - Missing character_id → 400.
 """
 from .conftest import CAMPAIGN_ID
+from .helpers import AttemptLog
 
 
 async def _seed_dice(gm_client, seed: int):
@@ -144,6 +145,7 @@ async def test_death_ward_floors_lethal_hit_at_1_hp(gm_client, gm_ws, roster):
 
     gm_ws.mark()
     hit_landed = False
+    _log = AttemptLog()
     for seed in range(1, 200):
         await _seed_dice(gm_client, seed)
         a = await gm_client.post(
@@ -155,13 +157,14 @@ async def test_death_ward_floors_lethal_hit_at_1_hp(gm_client, gm_ws, roster):
                 "override": True,
             },
         )
+        _log.record(a)
         if a.status_code != 200:
             continue
         data = a.json()
         if data.get("hit") and int(data.get("damage_applied") or 0) >= 3:
             hit_landed = True
             break
-    assert hit_landed, "no hit dealing >=3 damage landed in 200 seeds"
+    assert hit_landed, f"no hit dealing >=3 damage landed in 200 seeds — {_log.summary()}"
 
     import asyncio as _asy
     await _asy.sleep(0.3)

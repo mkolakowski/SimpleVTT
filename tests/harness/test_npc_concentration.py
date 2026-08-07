@@ -28,6 +28,7 @@ existent ``GET /battle`` endpoint; this version reads battle state
 out of the buffered ``battle_update`` broadcasts instead.
 """
 from .conftest import CAMPAIGN_ID
+from .helpers import AttemptLog
 
 
 async def _long_rest(gm_client, char_id: int) -> None:
@@ -189,6 +190,7 @@ async def test_npc_concentration_anchor_installs_and_breaks_on_damage(
     # any 60-iter dry spell is a hard signal of degraded test state
     # rather than dice variance.
     damage_landed = False
+    _log = AttemptLog()
     for _ in range(60):
         atk = await gm_client.post(
             f"/api/campaign/{CAMPAIGN_ID}/attack",
@@ -199,6 +201,7 @@ async def test_npc_concentration_anchor_installs_and_breaks_on_damage(
                 "override": True,
             },
         )
+        _log.record(atk)
         if atk.status_code != 200:
             continue
         data = atk.json()
@@ -207,7 +210,7 @@ async def test_npc_concentration_anchor_installs_and_breaks_on_damage(
             break
 
     assert damage_landed, (
-        "no Pip → Archmage hit landed in 60 tries"
+        f"no Pip → Archmage hit landed in 60 tries — {_log.summary()}"
     )
 
     # v2.98.0 contract: a concentration_save event fires for the

@@ -10,6 +10,44 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1047.8] - 2026-08-07 — "The Autopsy Note"
+
+**Schema version:** 104
+
+**Commit summary:** The attack-until-hit loops now report *why* nothing landed — the "no damaging hit in N tries" cluster was undiagnosable by construction.
+
+**Description:** Diagnostic instrumentation for the second-largest CI cluster: **12 failures** in run [31126181450](https://github.com/mkolakowski/SimpleVTT/actions/runs/31126181450), all of the form "no nonzero-damage hit in 15 tries" / "no hit dealing ≥3 damage landed in 200 seeds".
+
+**I did not find the root cause, and this commit does not fix it.** What it does is remove the reason it couldn't be found. A dozen tests share this shape:
+
+```python
+for seed in range(1, 200):
+    r = await post(...)
+    if r.status_code != 200:
+        continue          # <-- the real error dies here
+    ...
+assert landed, "no hit dealing >=3 damage landed in 200 seeds"
+```
+
+When the loop exhausts, the message says only that nothing landed. A 409 range gate, a 400, a target already at 0 HP, and "the attacker genuinely kept missing" are indistinguishable in the report. `helpers.AttemptLog` now records every attempt and puts the **status distribution**, the **hit/miss/resisted/immune outcome spread**, and the **last non-200 body** into the assertion.
+
+**What I did establish:**
+
+- **It is pollution, not broken tests.** All 12 pass on a freshly-seeded DB, and start failing once demo state is dirty — which is precisely the condition 4989 tests deep. I reproduced that transition locally: the same file passes after a reseed and fails after a dozen intervening runs.
+- **Reproducing the *specific* CI trigger needs most of the suite.** Nine-file and pairwise groupings produce *different* failures (a missing `feature_used` broadcast rather than an exhausted loop), so bisecting toward CI's exact cause would mean repeatedly running a 4-hour suite. Instrumenting is the cheaper path to the same answer.
+
+**A correction worth recording.** Mid-investigation I concluded these tests were "genuinely broken, not pollution" because one failed alone on a fresh seed. That was wrong, and the cause was my own environment: `TEST_MODE` defaults to `false` in `.env`, which makes `/api/test/dice/seed` 404 and the tests fail at `_seed_dice`'s assert — a *different* failure that superficially reads like CI's. CI runs `TEST_MODE=true`. With it set locally they pass. This is now flagged in `TODO.md` so the next person doesn't lose the same hour.
+
+### Added
+- `tests/harness/helpers.py` — `AttemptLog`: `record(resp)` per attempt, `summary()` for the assertion message. Documents the anti-pattern and why the cluster was undiagnosable.
+
+### Changed
+- `tests/harness/test_relentless_endurance.py`, `test_relentless_rage.py`, `test_cast_death_ward.py`, `test_npc_concentration.py` — attack loops record each attempt; the exhaustion assertions carry `AttemptLog.summary()`.
+- `TODO.md` — the "no damaging hit" row updated with what's established vs still open, plus the `TEST_MODE` repro gotcha.
+- `docs/test-harness-coverage.md` — header note; no test-count change.
+
+---
+
 ## [2.1047.7] - 2026-08-06 — "The Roll Call"
 
 **Schema version:** 104

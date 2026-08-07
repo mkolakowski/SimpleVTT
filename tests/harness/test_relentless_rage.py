@@ -28,6 +28,7 @@ import asyncio
 import pytest_asyncio
 
 from .conftest import CAMPAIGN_ID
+from .helpers import AttemptLog
 
 
 async def _seed_dice(gm_client, seed: int):
@@ -145,6 +146,7 @@ async def test_relentless_rage_fires_on_dying_transition(
     gm_ws.mark()
     krieger_tok = f"tok_rr_{krieger['id']}"
     hit_landed = False
+    _log = AttemptLog()
     for seed in range(1, 200):
         await _seed_dice(gm_client, seed)
         r = await gm_client.post(
@@ -156,13 +158,14 @@ async def test_relentless_rage_fires_on_dying_transition(
                 "override": True,
             },
         )
+        _log.record(r)
         if r.status_code != 200:
             continue
         data = r.json()
         if data.get("hit") and int(data.get("damage_applied") or 0) >= 3:
             hit_landed = True
             break
-    assert hit_landed, "no hit dealing ≥3 damage landed in 200 seeds"
+    assert hit_landed, f"no hit dealing ≥3 damage landed in 200 seeds — {_log.summary()}"
     await asyncio.sleep(0.3)
     msgs = _rr_broadcasts(gm_ws, krieger["id"])
     assert msgs, (
@@ -201,6 +204,7 @@ async def test_relentless_rage_skips_below_lv11(
     ])
     gm_ws.mark()
     krieger_tok = f"tok_rr_{krieger['id']}"
+    _log = AttemptLog()
     for seed in range(1, 200):
         await _seed_dice(gm_client, seed)
         r = await gm_client.post(
@@ -212,6 +216,7 @@ async def test_relentless_rage_skips_below_lv11(
                 "override": True,
             },
         )
+        _log.record(r)
         if r.status_code != 200:
             continue
         data = r.json()
@@ -238,6 +243,7 @@ async def test_relentless_rage_skips_without_active_rage(
     ])
     gm_ws.mark()
     krieger_tok = f"tok_rr_{krieger['id']}"
+    _log = AttemptLog()
     for seed in range(1, 200):
         await _seed_dice(gm_client, seed)
         r = await gm_client.post(
@@ -249,6 +255,7 @@ async def test_relentless_rage_skips_without_active_rage(
                 "override": True,
             },
         )
+        _log.record(r)
         if r.status_code != 200:
             continue
         data = r.json()
