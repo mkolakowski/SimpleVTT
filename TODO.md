@@ -1023,7 +1023,7 @@ Output: a `CREDITS.md` file at the repo root listing every third-party asset, it
 
 Two structural findings worth keeping:
 
-1. **The demo reset was masking as well as causing.** With the wipe gone, `test_demo_tokens_are_grid_aligned` started failing on tokens parked at `(100,100)` — off the 70 px grid — by the range fixtures. The periodic wipe used to tidy up before the alignment check ran. Expect more of this as other state stops being periodically laundered.
+1. ✅ **The demo reset was masking as well as causing** — *fixed v2.1047.9*. With the wipe gone, `test_demo_tokens_are_grid_aligned` started failing on tokens the range fixtures parked at `(100,100)`, off the 70 px grid; the periodic reseed had been laundering them. The three fixtures now use `ORIGIN_PX = 2 * PX_PER_CELL` (140) and every coordinate is `ORIGIN_PX + N * PX_PER_CELL`, so the asserted distances are unchanged. Negative-controlled: the old origin reproduces CI's exact failure (Pip / Thalindra / Magnus / Kael at 100,100). **Expect more of this class** as other state stops being periodically laundered.
 2. **The pattern is fixtures trusting shared state they didn't establish.** Three separate instances so far: `thalindra_with_token` not verifying its move (v2.1047.3), `ensure_token_at` missing a 409 gate (v2.1047.6), `positioned_combatants` trusting a stale `source_token_id` (v2.1047.7). A sweep for other fixtures that read-then-assume is probably higher yield than chasing failures one at a time.
 
 **Also filed (product, not test):** the realtime hub's battle state keeps combatants whose `source_token_id` no longer exists — nothing prunes on token delete. Harmless-ish for the harness now that it filters, but a real client mid-session would hit the same dangling reference.

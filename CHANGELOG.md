@@ -10,6 +10,38 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1047.9] - 2026-08-07 — "The Chalk Line"
+
+**Schema version:** 104
+
+**Commit summary:** The range fixtures park their tokens on the grid instead of 30 px off it.
+
+**Description:** Fixes the pollution my own v2.1047.5 unmasked. Campaign 1 is the harness's grid anchor — `test_demo_campaigns::test_demo_tokens_are_grid_aligned` requires every token's `(x, y)` to be a multiple of the 70 px grid. Three fixtures parked PCs at `(100, 100)`, and `100 % 70 == 30`.
+
+Those fixtures have always done this. It never failed because the demo scheduler wiped and reseeded the dataset every 60 minutes, quietly laundering the leftover positions before the alignment check ran. Stopping that wipe (v2.1047.5) removed the laundering and the latent breakage surfaced — **exactly the risk I flagged when shipping that change**, now confirmed rather than hypothesized.
+
+The fix introduces `ORIGIN_PX = 2 * PX_PER_CELL` (140) in each file. Every coordinate in these suites is already expressed as `ORIGIN_PX + N * PX_PER_CELL`, so moving the origin onto the grid leaves **every asserted distance identical** — the 350 ft / 50 ft / 120 ft range assertions are untouched. The NPC targets shift with it for the same reason.
+
+**Negative-controlled.** Reverting just these three files reproduces CI's failure verbatim, down to the character list:
+
+```
+campaign 1 off-grid tokens: [('Pip Quickfingers', 100.0, 100.0),
+  ('Thalindra Moonwhisper', 100.0, 100.0), ('Magnus Hexbinder', 100.0, 100.0),
+  ('Kael Brightleaf', 100.0, 100.0)]
+```
+
+With the fix, all 22 tests across the three range suites plus the alignment check pass.
+
+**Worth noting for what comes next:** this is the first confirmed instance of a broader pattern — state the periodic wipe was hiding. Other suites almost certainly leave similar residue that the reseed used to absorb. `TODO.md` records the expectation so the next surprise failure isn't mistaken for a regression.
+
+### Fixed
+- `tests/harness/test_cast_attack_range.py`, `test_cast_spell_range.py`, `test_place_aoe_range.py` — `ORIGIN_PX` replaces the off-grid `100` origin; every dependent coordinate follows automatically. Each file carries a comment explaining why the origin must be grid-aligned and why the wipe used to hide it.
+
+### Changed
+- `TODO.md` — the "reset was masking as well as causing" finding marked fixed, with the negative-control evidence and a standing warning about the rest of the class.
+
+---
+
 ## [2.1047.8] - 2026-08-07 — "The Autopsy Note"
 
 **Schema version:** 104

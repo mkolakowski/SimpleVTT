@@ -34,6 +34,16 @@ from .helpers import ensure_token_at
 
 
 PX_PER_CELL = 70
+# v2.1047.9 — the setup origin must sit ON the 70 px grid. It was 100,
+# which is off-grid (100 % 70 == 30), and campaign 1's tokens are
+# required to be grid-aligned by
+# ``test_demo_campaigns::test_demo_tokens_are_grid_aligned``. That check
+# only started failing once v2.1047.5 stopped the demo scheduler from
+# wiping the dataset every 60 minutes — the periodic reseed had been
+# quietly laundering these leftover positions. Every coordinate below is
+# ORIGIN_PX + N * PX_PER_CELL, so moving the origin keeps every distance
+# the tests assert on exactly the same.
+ORIGIN_PX = 2 * PX_PER_CELL  # 140
 FT_PER_CELL = 5
 
 
@@ -125,9 +135,9 @@ async def test_attack_in_range_succeeds(gm_client, alice_client, roster):
     Alice owns Pip, so the range check fires (no GM auto-bypass)."""
     pip = roster["Pip Quickfingers"]
     bandit_tmpl = await _bandit_template(gm_client)
-    pip_tok = await _ensure_pc_token(gm_client, pip["id"], 100, 100)
+    pip_tok = await _ensure_pc_token(gm_client, pip["id"], ORIGIN_PX, ORIGIN_PX)
     bandit = await _place_test_npc(
-        gm_client, 100 + PX_PER_CELL, 100, bandit_tmpl["id"],
+        gm_client, ORIGIN_PX + PX_PER_CELL, ORIGIN_PX, bandit_tmpl["id"],
         label="Attack Range Bandit (in)",
     )
     try:
@@ -154,9 +164,9 @@ async def test_attack_out_of_range_409(gm_client, alice_client, roster):
     (shortsword is 5 ft melee)."""
     pip = roster["Pip Quickfingers"]
     bandit_tmpl = await _bandit_template(gm_client)
-    pip_tok = await _ensure_pc_token(gm_client, pip["id"], 100, 100)
+    pip_tok = await _ensure_pc_token(gm_client, pip["id"], ORIGIN_PX, ORIGIN_PX)
     bandit = await _place_test_npc(
-        gm_client, 100 + 10 * PX_PER_CELL, 100, bandit_tmpl["id"],
+        gm_client, ORIGIN_PX + 10 * PX_PER_CELL, ORIGIN_PX, bandit_tmpl["id"],
         label="Attack Range Bandit (out)",
     )
     try:
@@ -192,9 +202,9 @@ async def test_attack_thrown_long_range_uses_long_band(
     the (20, 60) tuple to the long band as the absolute reach gate."""
     pip = roster["Pip Quickfingers"]
     bandit_tmpl = await _bandit_template(gm_client)
-    pip_tok = await _ensure_pc_token(gm_client, pip["id"], 100, 100)
+    pip_tok = await _ensure_pc_token(gm_client, pip["id"], ORIGIN_PX, ORIGIN_PX)
     bandit = await _place_test_npc(
-        gm_client, 100 + 10 * PX_PER_CELL, 100, bandit_tmpl["id"],
+        gm_client, ORIGIN_PX + 10 * PX_PER_CELL, ORIGIN_PX, bandit_tmpl["id"],
         label="Attack Range Bandit (thrown)",
     )
     try:
@@ -232,9 +242,9 @@ async def test_cast_hex_in_range_succeeds(gm_client, roster):
         f"/api/campaign/{CAMPAIGN_ID}/character/{magnus['id']}/rest",
         json={"type": "long"},
     )
-    await _ensure_pc_token(gm_client, magnus["id"], 100, 100)
+    await _ensure_pc_token(gm_client, magnus["id"], ORIGIN_PX, ORIGIN_PX)
     bandit = await _place_test_npc(
-        gm_client, 100 + PX_PER_CELL, 100, bandit_tmpl["id"],
+        gm_client, ORIGIN_PX + PX_PER_CELL, ORIGIN_PX, bandit_tmpl["id"],
         label="Hex Range Bandit",
     )
     try:
@@ -278,9 +288,9 @@ async def test_stunning_strike_in_range_succeeds(gm_client, roster):
         f"/api/campaign/{CAMPAIGN_ID}/character/{kael['id']}/rest",
         json={"type": "long"},
     )
-    await _ensure_pc_token(gm_client, kael["id"], 100, 100)
+    await _ensure_pc_token(gm_client, kael["id"], ORIGIN_PX, ORIGIN_PX)
     bandit = await _place_test_npc(
-        gm_client, 100 + PX_PER_CELL, 100, bandit_tmpl["id"],
+        gm_client, ORIGIN_PX + PX_PER_CELL, ORIGIN_PX, bandit_tmpl["id"],
         label="Stun Range Bandit",
     )
     try:
@@ -310,9 +320,9 @@ async def test_open_hand_technique_in_range_succeeds(gm_client, roster):
     range. Same GM-owned caveat as Stunning Strike."""
     kael = roster["Kael Brightleaf"]
     bandit_tmpl = await _bandit_template(gm_client)
-    await _ensure_pc_token(gm_client, kael["id"], 100, 100)
+    await _ensure_pc_token(gm_client, kael["id"], ORIGIN_PX, ORIGIN_PX)
     bandit = await _place_test_npc(
-        gm_client, 100 + PX_PER_CELL, 100, bandit_tmpl["id"],
+        gm_client, ORIGIN_PX + PX_PER_CELL, ORIGIN_PX, bandit_tmpl["id"],
         label="OHT Range Bandit",
     )
     try:

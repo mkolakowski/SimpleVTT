@@ -33,12 +33,22 @@ SHIELD_INDEX = 4      # L1, Self range, reaction
 # Grid math on the demo map: 70 px = 1 cell = 5 ft.
 # Fire Bolt range = 120 ft = 24 cells = 1680 px.
 PX_PER_CELL = 70
+# v2.1047.9 — the setup origin must sit ON the 70 px grid. It was 100,
+# which is off-grid (100 % 70 == 30), and campaign 1's tokens are
+# required to be grid-aligned by
+# ``test_demo_campaigns::test_demo_tokens_are_grid_aligned``. That check
+# only started failing once v2.1047.5 stopped the demo scheduler from
+# wiping the dataset every 60 minutes — the periodic reseed had been
+# quietly laundering these leftover positions. Every coordinate below is
+# ORIGIN_PX + N * PX_PER_CELL, so moving the origin keeps every distance
+# the tests assert on exactly the same.
+ORIGIN_PX = 2 * PX_PER_CELL  # 140
 FT_PER_CELL = 5
 
 
 @pytest_asyncio.fixture
 async def thalindra_with_token(gm_client, roster):
-    """Ensure Thalindra has a token on the demo map at (100, 100).
+    """Ensure Thalindra has a token on the demo map at (ORIGIN_PX, ORIGIN_PX).
     Returns (character_dict, token_dict). The fixture is GM-driven
     because POST /tokens + token-place are GM-only; the cast itself
     runs as bob_client so the range gate actually fires.
@@ -55,7 +65,7 @@ async def thalindra_with_token(gm_client, roster):
         json={"type": "long"},
     )
     th_tok = await ensure_token_at(
-        gm_client, CAMPAIGN_ID, thalindra["id"], 100, 100)
+        gm_client, CAMPAIGN_ID, thalindra["id"], ORIGIN_PX, ORIGIN_PX)
     return thalindra, th_tok
 
 
@@ -132,7 +142,7 @@ async def test_in_range_succeeds(gm_client, bob_client, thalindra_with_token):
     bandit_tmpl = await _bandit_template(gm_client)
     # 2 cells away = 10 ft. Well under 120 ft.
     bandit = await _place_test_npc(
-        gm_client, 100 + 2 * PX_PER_CELL, 100, bandit_tmpl["id"],
+        gm_client, ORIGIN_PX + 2 * PX_PER_CELL, ORIGIN_PX, bandit_tmpl["id"],
         label="Range Test Bandit (in range)",
     )
     try:
@@ -157,9 +167,9 @@ async def test_out_of_range_409(gm_client, bob_client, thalindra_with_token):
     thalindra, _ = thalindra_with_token
     bandit_tmpl = await _bandit_template(gm_client)
     # 70 cells away = 350 ft. Well past Fire Bolt's 120 ft.
-    far_x = 100 + 70 * PX_PER_CELL
+    far_x = ORIGIN_PX + 70 * PX_PER_CELL
     bandit = await _place_test_npc(
-        gm_client, far_x, 100, bandit_tmpl["id"],
+        gm_client, far_x, ORIGIN_PX, bandit_tmpl["id"],
         label="Range Test Bandit (far)",
     )
     try:
@@ -196,9 +206,9 @@ async def test_override_range_bypasses_409(
     """
     thalindra, _ = thalindra_with_token
     bandit_tmpl = await _bandit_template(gm_client)
-    far_x = 100 + 70 * PX_PER_CELL
+    far_x = ORIGIN_PX + 70 * PX_PER_CELL
     bandit = await _place_test_npc(
-        gm_client, far_x, 100, bandit_tmpl["id"],
+        gm_client, far_x, ORIGIN_PX, bandit_tmpl["id"],
         label="Range Test Bandit (override)",
     )
     try:
@@ -226,9 +236,9 @@ async def test_gm_bypasses_range_check(gm_client, thalindra_with_token):
     """
     thalindra, _ = thalindra_with_token
     bandit_tmpl = await _bandit_template(gm_client)
-    far_x = 100 + 70 * PX_PER_CELL
+    far_x = ORIGIN_PX + 70 * PX_PER_CELL
     bandit = await _place_test_npc(
-        gm_client, far_x, 100, bandit_tmpl["id"],
+        gm_client, far_x, ORIGIN_PX, bandit_tmpl["id"],
         label="Range Test Bandit (gm bypass)",
     )
     try:

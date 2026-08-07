@@ -35,11 +35,21 @@ FIREBALL_INDEX = 10  # Fireball (range 150 ft) in Thalindra's *stored* sheet.
 
 # Demo grid: 70 px = 1 cell = 5 ft. Fireball 150 ft = 30 cells = 2100 px.
 PX_PER_CELL = 70
+# v2.1047.9 — the setup origin must sit ON the 70 px grid. It was 100,
+# which is off-grid (100 % 70 == 30), and campaign 1's tokens are
+# required to be grid-aligned by
+# ``test_demo_campaigns::test_demo_tokens_are_grid_aligned``. That check
+# only started failing once v2.1047.5 stopped the demo scheduler from
+# wiping the dataset every 60 minutes — the periodic reseed had been
+# quietly laundering these leftover positions. Every coordinate below is
+# ORIGIN_PX + N * PX_PER_CELL, so moving the origin keeps every distance
+# the tests assert on exactly the same.
+ORIGIN_PX = 2 * PX_PER_CELL  # 140
 
 
 @pytest_asyncio.fixture
 async def thalindra_at_origin(gm_client, roster):
-    """Long-rest Thalindra + place her token at (100, 100). Returns
+    """Long-rest Thalindra + place her token at (ORIGIN_PX, ORIGIN_PX). Returns
     the character dict."""
     thal = roster["Thalindra Moonwhisper"]
     await gm_client.post(
@@ -48,7 +58,7 @@ async def thalindra_at_origin(gm_client, roster):
     )
     # v2.1047.3 — see ensure_token_at: the old fire-and-forget move
     # could 409 against a leftover battle, leaving the AoE origin wrong.
-    await ensure_token_at(gm_client, CAMPAIGN_ID, thal["id"], 100, 100)
+    await ensure_token_at(gm_client, CAMPAIGN_ID, thal["id"], ORIGIN_PX, ORIGIN_PX)
     return thal
 
 
@@ -82,7 +92,7 @@ async def test_place_aoe_in_range_succeeds(gm_client, bob_client, thalindra_at_o
         json={
             "cast_id": cast_id,
             "target_combatant_ids": [],
-            "center": {"x": 100 + 10 * PX_PER_CELL, "y": 100},
+            "center": {"x": ORIGIN_PX + 10 * PX_PER_CELL, "y": ORIGIN_PX},
         },
     )
     assert r.status_code == 200, r.text
@@ -94,13 +104,13 @@ async def test_place_aoe_out_of_range_409(gm_client, bob_client, thalindra_at_or
     response shape."""
     thal = thalindra_at_origin
     cast_id = await _init_aoe_cast(bob_client, thal["id"])
-    far_x = 100 + 70 * PX_PER_CELL  # 70 cells × 5 ft = 350 ft
+    far_x = ORIGIN_PX + 70 * PX_PER_CELL  # 70 cells × 5 ft = 350 ft
     r = await bob_client.post(
         f"/api/campaign/{CAMPAIGN_ID}/place_aoe",
         json={
             "cast_id": cast_id,
             "target_combatant_ids": [],
-            "center": {"x": far_x, "y": 100},
+            "center": {"x": far_x, "y": ORIGIN_PX},
         },
     )
     assert r.status_code == 409, r.text
@@ -121,13 +131,13 @@ async def test_place_aoe_override_bypasses_409(
     override bypass when strict mode is off)."""
     thal = thalindra_at_origin
     cast_id = await _init_aoe_cast(bob_client, thal["id"])
-    far_x = 100 + 70 * PX_PER_CELL
+    far_x = ORIGIN_PX + 70 * PX_PER_CELL
     r = await bob_client.post(
         f"/api/campaign/{CAMPAIGN_ID}/place_aoe",
         json={
             "cast_id": cast_id,
             "target_combatant_ids": [],
-            "center": {"x": far_x, "y": 100},
+            "center": {"x": far_x, "y": ORIGIN_PX},
             "override_range": True,
         },
     )
@@ -139,13 +149,13 @@ async def test_place_aoe_gm_bypasses_range_check(gm_client, thalindra_at_origin)
     (GM auto-bypass)."""
     thal = thalindra_at_origin
     cast_id = await _init_aoe_cast(gm_client, thal["id"])
-    far_x = 100 + 70 * PX_PER_CELL
+    far_x = ORIGIN_PX + 70 * PX_PER_CELL
     r = await gm_client.post(
         f"/api/campaign/{CAMPAIGN_ID}/place_aoe",
         json={
             "cast_id": cast_id,
             "target_combatant_ids": [],
-            "center": {"x": far_x, "y": 100},
+            "center": {"x": far_x, "y": ORIGIN_PX},
             # No override_range — GM bypasses regardless.
         },
     )
