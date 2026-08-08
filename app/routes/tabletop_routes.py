@@ -32254,6 +32254,92 @@ async def set_surprised(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/detect_surprise")
+async def detect_surprise(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.1057.0 — auto-detect surprise (RAW PHB p.189). The GM names the
+    ambushing (hidden) side; the engine rolls each ambusher's Dexterity
+    (Stealth) check and compares it against every other combatant's passive
+    Wisdom (Perception). A defender that notices **no** ambusher — i.e. its
+    passive Perception is below *every* ambusher's Stealth roll — is
+    surprised, and its combatant `surprised` flag is set (feeding the
+    Assassinate auto-crit + the turn-start auto-clear).
+
+    Body: ``{ambusher_combatant_ids: [...]}``. GM-only. Rolls go through
+    the seedable dice RNG so tests are deterministic. Errors: 400 no
+    ambushers / none resolvable; 403 non-GM; 404 no battle.
+    """
+    body = await request.json()
+    amb_ids = [str(i).strip() for i in (body.get("ambusher_combatant_ids") or [])
+               if str(i).strip()]
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    if not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only — surprise is GM-authorised")
+    if not amb_ids:
+        raise HTTPException(400, "ambusher_combatant_ids is required")
+
+    state = hub.get_battle(campaign_id)
+    if not state:
+        raise HTTPException(404, "No active battle")
+    combatants = state.get("combatants") or []
+    by_id = {c.get("id"): c for c in combatants}
+    amb_set = set(amb_ids)
+
+    # Roll each ambusher's Stealth check (1d20 + Stealth mod). A defender
+    # notices a given ambusher when its passive Perception >= that
+    # ambusher's roll, so a defender is surprised only when it beats none —
+    # i.e. its passive is below the LOWEST ambusher roll.
+    ambusher_rolls: list[dict] = []
+    for aid in amb_ids:
+        c = by_id.get(aid)
+        if c is None:
+            continue
+        sheet = _combatant_sheet_for_vision(db, campaign_id, c)
+        mod, _ = _resolve_stat_modifier(sheet, "dnd5e", "Stealth")
+        r = dice_mod.roll(f"1d20{mod:+d}")
+        ambusher_rolls.append({
+            "combatant_id": aid, "name": c.get("name"),
+            "stealth": int(r.total), "mod": int(mod),
+        })
+    if not ambusher_rolls:
+        raise HTTPException(400, "No ambusher combatants resolved")
+    threshold = min(r["stealth"] for r in ambusher_rolls)
+
+    surprised_ids, safe = [], []
+    for c in combatants:
+        cid = c.get("id")
+        if not cid or cid in amb_set:
+            continue  # ambushers aren't surprised
+        sheet = _combatant_sheet_for_vision(db, campaign_id, c)
+        pp = _passive_perception(sheet)
+        if pp < threshold:
+            c["surprised"] = True
+            surprised_ids.append(cid)
+        else:
+            # Clear any stale surprise on a defender who now notices them.
+            if c.get("surprised"):
+                c["surprised"] = False
+            safe.append(cid)
+    hub.set_battle(campaign_id, state)
+    await hub.broadcast(campaign_id, {
+        "type": "battle_update", "data": state, "force_gm_sync": True,
+    })
+    return {
+        "ok": True,
+        "surprised": surprised_ids,
+        "not_surprised": safe,
+        "threshold": threshold,
+        "ambusher_rolls": ambusher_rolls,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/spend_legendary_resistance")
 async def spend_legendary_resistance(
     campaign_id: int,

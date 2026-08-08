@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1057.0] - 2026-08-08 — "The Silent Approach"
+
+**Schema version:** 104
+
+**Commit summary:** Auto-detect surprise from Stealth vs passive Perception — completes Assassinate auto-surprise.
+
+**Description:** Second half of Assassinate auto-surprise (v2.1056.0 shipped the state model). The GM no longer has to hand-mark who's surprised: **`POST /api/campaign/{cid}/detect_surprise`** takes the ambushing (hidden) side's combatant ids, rolls each ambusher's Dexterity (Stealth) check, and compares it against every other combatant's passive Wisdom (Perception) — RAW PHB p.189. A defender that notices **no** ambusher (its passive Perception is below *every* ambusher's Stealth roll) is surprised, and its `surprised` combatant flag is set — which flows straight into the v2.1056.0 Assassinate auto-crit and the turn-start auto-clear.
+
+The Stealth rolls go through the seedable dice RNG (deterministic under test), and the response returns the per-ambusher rolls, the `threshold` (the minimum ambusher roll — the bar a defender must beat to stay alert), and the resulting `surprised` / `not_surprised` partition. A defender who now notices the ambushers has any stale surprise cleared. Reuses the existing sheet resolvers (`_combatant_sheet_for_vision` for PC or NPC-template, `_resolve_stat_modifier` for Stealth, `_passive_perception`).
+
+With this, the Assassinate/surprise loop is closed end-to-end: GM names the ambushers → engine computes surprise → the Assassin's hits on surprised targets auto-crit → surprise clears when each target takes its turn. No client `target_surprised` flag needed anywhere.
+
+### Added
+
+- **`POST /api/campaign/{cid}/detect_surprise`** — GM auto-detects surprise (ambusher Stealth vs defender passive Perception), sets the `surprised` flag on surprised defenders, returns the rolls + partition.
+- **Harness:** `tests/harness/test_detect_surprise.py` (4) — a stealthy rogue flags a low-Perception bandit surprised (seeded); consistency (ambushers never surprised, full partition, threshold == min roll); GM-only; 400 on no ambushers.
+
 ## [2.1056.0] - 2026-08-08 — "The Unseen Blade"
 
 **Schema version:** 104
