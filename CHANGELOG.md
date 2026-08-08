@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1058.0] - 2026-08-08 — "The Waking Instinct"
+
+**Schema version:** 104
+
+**Commit summary:** Thief's Reflexes reads the real server-side surprise state — closing Phase 2's surprise-integration item.
+
+**Description:** A focused step on [`thiefs-reflexes.md`](docs/plans/thiefs-reflexes.md) Phase 2, unblocked by the v2.1056.0 surprise model. RAW (PHB p.98): *"You can't use this feature when you're surprised."* The v1 `/use_thiefs_reflexes` (v2.1018.0) checked a client-passed `surprised` body flag; now it also reads the thief's **own combatant `surprised` flag** from the server-side surprise model, so surprise is honored automatically — if `/set_surprised` (or `/detect_surprise`) has flagged the thief, the feature 409s without the client having to declare it (the body flag still works as a manual override; the 409 reports `source: "server_state"` vs `"body"`).
+
+This closes **item 4 (surprise integration)** of the plan's Phase 2 list. The remaining Phase 2 work — the phantom second-turn slot in the initiative tracker, making the combatant iterators phantom-aware, round-2 pruning, and the client rendering/turn-advancement — stays filed and gated on the encounter-sim Level-3 (Playwright) framework, because the HTTP harness can't verify turn rendering/advancement and injecting a phantom combatant would desync the client-managed `turn_index`. This commit does **not** attempt that; it ships the cleanly-testable surprise slice.
+
+### Changed
+
+- **`POST /api/campaign/{cid}/use_thiefs_reflexes`** now reads the thief combatant's server `surprised` flag for the "can't use when surprised" gate (in addition to the legacy `surprised` body flag); the surprised 409 reports its `source`.
+- **Harness:** `tests/harness/test_thiefs_reflexes.py` (+1 → 8) — `test_thiefs_reflexes_surprised_from_server_state`: `/set_surprised` the thief → `/use_thiefs_reflexes` 409 (`source: server_state`) with no client flag.
+
 ## [2.1057.0] - 2026-08-08 — "The Silent Approach"
 
 **Schema version:** 104

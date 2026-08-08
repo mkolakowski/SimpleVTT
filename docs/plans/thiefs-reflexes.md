@@ -1,6 +1,6 @@
 # Thief's Reflexes — design plan
 
-**Status:** 🟠 partial — scoped v1 (announce + marker) shipped v2.1018.0; the full initiative-engine second-turn slot is filed below.
+**Status:** 🟠 partial — scoped v1 (announce + marker) shipped v2.1018.0; surprise integration (Phase 2 item 4) shipped v2.1058.0; the full initiative-engine second-turn slot (items 1–3 + client + Playwright) is filed below, still gated on the encounter-sim Level-3 framework.
 
 **Feature:** Thief's Reflexes (Thief Rogue Lv 17+, PHB p.98): "You can
 take two turns during the first round of any combat. You take your first
@@ -66,8 +66,11 @@ The mechanized version needs, in order:
    no token / `char_id`).
 3. **Round-2 pruning** — a turn-advance hook that removes the phantom
    when `round` increments past 1 (RAW: round 1 only).
-4. **Surprise integration** — a surprised thief can't use it; ties into
-   whatever surprise model the tracker grows.
+4. **Surprise integration** — ✅ **shipped v2.1058.0.** `/use_thiefs_reflexes`
+   reads the thief combatant's server-side `surprised` flag (the v2.1056.0
+   surprise model: `/set_surprised` + `/detect_surprise`), so the RAW
+   "can't use when surprised" gate no longer needs the client to declare
+   it. Harness: `test_thiefs_reflexes_surprised_from_server_state`.
 5. **Encounter-sim (Playwright) coverage** — because the HTTP harness
    can't see the tracker, the Level-3 encounter-sim layer
    ([`encounter-sim-test-suite.md`](encounter-sim-test-suite.md)) is the

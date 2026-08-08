@@ -128,6 +128,33 @@ async def test_thiefs_reflexes_surprised(gm_client, roster):
                            class_slug="rogue")
 
 
+async def test_thiefs_reflexes_surprised_from_server_state(gm_client, roster):
+    """v2.1058.0 — the surprise gate now reads the thief's server-side
+    `surprised` combatant flag (set via /set_surprised), so no client
+    `surprised` body flag is needed. 409 with `source: server_state`."""
+    pip = roster["Pip Quickfingers"]
+    await _patch_sheet(gm_client, pip["id"], {"level": 17},
+                       class_slug="rogue")
+    try:
+        await _seed(gm_client, pip, round_no=1)
+        tok = f"tok_tr_pip_{pip['id']}"
+        sr = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/set_surprised",
+            json={"combatant_ids": [tok], "surprised": True})
+        assert sr.status_code == 200, sr.text
+        r = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/use_thiefs_reflexes",
+            json={"character_id": pip["id"]},  # no client `surprised`
+        )
+        assert r.status_code == 409, r.text
+        d = r.json()
+        assert d.get("error") == "surprised", d
+        assert d.get("source") == "server_state", d
+    finally:
+        await _patch_sheet(gm_client, pip["id"], {"level": 7},
+                           class_slug="rogue")
+
+
 async def test_thiefs_reflexes_not_in_initiative(gm_client, roster):
     """Thief not in the initiative order → 409 not_in_initiative."""
     pip = roster["Pip Quickfingers"]

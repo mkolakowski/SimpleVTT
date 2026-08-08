@@ -65231,13 +65231,6 @@ async def use_thiefs_reflexes(
             "got_level": _rogue_level_from_sheet(sheet),
         })
 
-    if surprised:
-        return JSONResponse(status_code=409, content={
-            "error": "surprised",
-            "label": "Thief's Reflexes",
-            "hint": "RAW: you can't use this feature when you're surprised.",
-        })
-
     state = hub.get_battle(campaign_id)
     if not state or not state.get("active"):
         return JSONResponse(status_code=409, content={
@@ -65263,6 +65256,18 @@ async def use_thiefs_reflexes(
         return JSONResponse(status_code=409, content={
             "error": "not_in_initiative", "label": "Thief's Reflexes",
             "hint": "The thief must be in the initiative order.",
+        })
+    # v2.1058.0 — surprise integration (Phase 2 item 4 of
+    # thiefs-reflexes.md). Read the thief's own combatant `surprised` flag
+    # from the v2.1056.0 server-side surprise model, so the RAW "can't use
+    # when surprised" gate no longer depends on the client passing the flag.
+    # The `surprised` body field still works as a manual override.
+    if surprised or bool(thief_cb.get("surprised")):
+        return JSONResponse(status_code=409, content={
+            "error": "surprised",
+            "label": "Thief's Reflexes",
+            "hint": "RAW: you can't use this feature when you're surprised.",
+            "source": "server_state" if thief_cb.get("surprised") else "body",
         })
     try:
         base_init = int(thief_cb.get("initiative") or 0)
