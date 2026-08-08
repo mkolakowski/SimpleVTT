@@ -433,36 +433,53 @@ _GENERATORS = {
 }
 
 
+# Cell/dimension bounds. The image's natural size must equal the Map's
+# width/height (the tabletop coordinate invariant), so the grid stays
+# small enough that cols*cell / rows*cell never exceed this cap.
+_MAX_DIM_PX = 8000
+_MIN_CELL, _MAX_CELL = 20, 200
+_MIN_COLS, _MIN_ROWS = 10, 8
+
+
 def generate_map(
     *,
     size: str = _DEFAULT_SIZE,
     biome: str = _DEFAULT_BIOME,
     density: float = 0.5,
     cell_px: int = 70,
+    cols: Optional[int] = None,
+    rows: Optional[int] = None,
     seed: Optional[int] = None,
 ) -> dict:
     """Generate a battle map with functional walls.
 
     Returns ``{"png": bytes, "width_px": int, "height_px": int,
-    "walls": list}`` — the ``walls`` list is the Maps 2.0 line-of-sight
-    format (pixel-coord solid segments + toggleable door segments), ready
-    to store on ``Map.walls``. ``size`` is one of :func:`size_presets`
-    and ``biome`` one of :func:`biomes`; unknown values fall back to the
-    defaults. ``density`` (clamped to [0, 1]) scales the biome's feature
-    richness — room / obstacle / partition count, or cave tightness.
-    ``seed`` makes the output deterministic (same seed + biome + density →
-    same map + same walls).
+    "grid_size_px": int, "walls": list}`` — ``grid_size_px`` is the render
+    cell the caller must store on ``Map.grid_size_px`` so the overlay
+    aligns with the drawn cells. ``walls`` is the Maps 2.0 line-of-sight
+    format. ``size`` is one of :func:`size_presets` (or ``"custom"``, which
+    uses the ``cols``/``rows`` args); ``biome`` one of :func:`biomes`;
+    unknown values fall back to the defaults. ``density`` (clamped to
+    [0, 1]) scales the biome's feature richness. ``seed`` makes the output
+    deterministic (same inputs → same map + same walls).
     """
-    cols, rows = _SIZE_PRESETS.get(size, _SIZE_PRESETS[_DEFAULT_SIZE])
     cfg = _BIOMES.get(biome, _BIOMES[_DEFAULT_BIOME])
-    cell = max(20, min(int(cell_px), 200))
+    cell = max(_MIN_CELL, min(int(cell_px), _MAX_CELL))
+    # Cap cells so the image never exceeds the Map dimension invariant.
+    max_cells = max(_MIN_COLS, _MAX_DIM_PX // cell)
+    if size == "custom" and cols and rows:
+        c = max(_MIN_COLS, min(int(cols), max_cells))
+        r = max(_MIN_ROWS, min(int(rows), max_cells))
+    else:
+        c, r = _SIZE_PRESETS.get(size, _SIZE_PRESETS[_DEFAULT_SIZE])
     dens = max(0.0, min(1.0, float(density)))
     rng = random.Random(seed)
-    grid, doors = _GENERATORS[cfg["gen"]](cols, rows, rng, dens)
+    grid, doors = _GENERATORS[cfg["gen"]](c, r, rng, dens)
     return {
         "png": _render(grid, doors, cell, cfg),
-        "width_px": cols * cell,
-        "height_px": rows * cell,
+        "width_px": c * cell,
+        "height_px": r * cell,
+        "grid_size_px": cell,
         "walls": _wall_segments(grid, doors, cell),
     }
 

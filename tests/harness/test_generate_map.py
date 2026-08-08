@@ -166,6 +166,28 @@ async def test_generate_is_deterministic(gm_client):
             await _delete_map(gm_client, mid)
 
 
+async def test_generate_custom_size(gm_client):
+    """size=custom honours cols/rows — the served PNG's real dimensions
+    equal cols*cell × rows*cell."""
+    r = await gm_client.post(
+        f"/campaign/{CAMPAIGN_ID}/settings/maps/generate",
+        data={"size": "custom", "cols": "50", "rows": "40",
+              "grid_size_px": "70", "seed": "1"},
+    )
+    assert r.status_code == 200, r.text
+    m = r.json()["map"]
+    try:
+        img = await gm_client.get(m["image_url"])
+        assert img.status_code == 200, img.text
+        # PNG IHDR: width/height are big-endian uint32 at bytes 16 and 20.
+        width = int.from_bytes(img.content[16:20], "big")
+        height = int.from_bytes(img.content[20:24], "big")
+        assert width == 50 * 70, width
+        assert height == 40 * 70, height
+    finally:
+        await _delete_map(gm_client, m["id"])
+
+
 async def test_generate_bad_size(gm_client):
     r = await gm_client.post(
         f"/campaign/{CAMPAIGN_ID}/settings/maps/generate",

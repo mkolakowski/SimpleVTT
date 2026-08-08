@@ -907,8 +907,8 @@ Procedural map generation — produce a playable battle map without any external
 ✅ **Functional wall-segment population shipped v2.1049.0 "The Load-Bearing Wall"** — the generated map now populates `Map.walls` (Maps 2.0 LOS format): solid segments trace the room/corridor boundaries and each door threshold is a toggleable `door:true` segment, so vision occlusion + door open/close work out of the box. `generate_dungeon()` returns the walls alongside the PNG. Harness: `test_generate_populates_functional_walls`.
 ✅ **Biome presets shipped v2.1050.0 "The Cartographer's Palette"** — a `biome` picker with four styles: **dungeon** (rooms + corridors), **cave** (cellular-automata caverns, largest-region-pruned), **wilderness** (open field + obstacle clumps), **tavern** (walled building + doored partition), each with its own palette. All ride the v2.1049.0 wall pipeline. Harness: `test_generate_all_biomes` + `test_generate_bad_biome`.
 ✅ **Density slider shipped v2.1051.0 "The Draftsman's Dial"** — a 0–100 Density knob scales each biome's feature richness (dungeon room count, cave tightness, wilderness obstacle count, tavern partition count 1→3). Wired into `generate_map(density=…)`, clamped server-side. Harness: `test_generate_density_changes_map`.
+✅ **Custom size shipped v2.1052.0 "The Surveyor's Chain"** — a `Custom…` size option with free cols/rows entry (clamped so the image stays ≤ 8000 px/side); also fixed a grid-overlay drift where a grid size > 200 px stored a `grid_size_px` that didn't match the render cell. Harness: `test_generate_custom_size`.
 **Remaining follow-ups (filed, all optional):**
-- **Custom size** — free cols/rows entry beyond the three size presets (dimensions already clamp at 8000 px).
 - **More biomes** — e.g. sewer, crypt, ruins, coastline (the four shipped are the TODO's named set; these are optional extensions).
 
 ### Bundled Art Assets (Maps, Player Tokens, Monster Tokens)

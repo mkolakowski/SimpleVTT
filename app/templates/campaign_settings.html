@@ -839,12 +839,19 @@
                 </select>
             </label>
             <label>Size
-                <select name="size">
+                <select name="size" id="gen-map-size">
                     <option value="small">Small (24×18)</option>
                     <option value="medium" selected>Medium (32×24)</option>
                     <option value="large">Large (44×32)</option>
+                    <option value="custom">Custom…</option>
                 </select>
             </label>
+            <div id="gen-map-custom" style="display:none;gap:8px;align-items:center;">
+                <label style="display:inline-flex;align-items:center;gap:4px;">Cols
+                    <input type="number" name="cols" id="gen-map-cols" value="32" min="10" max="114" style="width:70px;"></label>
+                <label style="display:inline-flex;align-items:center;gap:4px;">Rows
+                    <input type="number" name="rows" id="gen-map-rows" value="24" min="8" max="114" style="width:70px;"></label>
+            </div>
             <label style="display:flex;align-items:center;gap:8px;">Density
                 <input type="range" name="density" id="gen-map-density" min="0" max="100" value="50" style="flex:1;min-width:120px;">
                 <span id="gen-map-density-val" style="font-size:11px;color:var(--fg-mute);min-width:56px;text-align:right;">Normal</span>
@@ -866,11 +873,20 @@
                     const v = +densInput.value;
                     densVal.textContent = v <= 25 ? 'Sparse' : v >= 75 ? 'Dense' : 'Normal';
                 });
+                const sizeSel = document.getElementById('gen-map-size');
+                const custom = document.getElementById('gen-map-custom');
+                if (sizeSel) sizeSel.addEventListener('change', () => {
+                    custom.style.display = (sizeSel.value === 'custom') ? 'flex' : 'none';
+                });
                 btn.addEventListener('click', () => {
                     const fd = new FormData();
                     fd.append('name', form.name.value);
                     fd.append('biome', form.biome.value);
                     fd.append('size', form.size.value);
+                    if (form.size.value === 'custom') {
+                        fd.append('cols', form.cols.value);
+                        fd.append('rows', form.rows.value);
+                    }
                     fd.append('density', form.density.value);
                     fd.append('grid_size_px', form.grid_size_px.value);
                     if (form.seed.value !== '') fd.append('seed', form.seed.value);

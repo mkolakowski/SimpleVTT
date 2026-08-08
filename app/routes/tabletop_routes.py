@@ -126668,6 +126668,8 @@ async def settings_generate_map(
     size: str = Form("medium"),
     biome: str = Form("dungeon"),
     density: int = Form(50),
+    cols: Optional[int] = Form(None),
+    rows: Optional[int] = Form(None),
     grid_size_px: int = Form(70),
     seed: Optional[int] = Form(None),
     db: Session = Depends(get_db),
@@ -126686,14 +126688,14 @@ async def settings_generate_map(
 
     from ..map_generator import generate_map, size_presets, biomes
 
-    if size not in size_presets():
+    if size not in size_presets() and size != "custom":
         raise HTTPException(400, "Unknown size")
     if biome not in {b["key"] for b in biomes()}:
         raise HTTPException(400, "Unknown biome")
-    cell = max(20, min(int(grid_size_px), 300))
     dens = max(0, min(int(density), 100)) / 100.0
     dungeon = generate_map(
-        size=size, biome=biome, density=dens, cell_px=cell, seed=seed)
+        size=size, biome=biome, density=dens, cell_px=int(grid_size_px),
+        cols=cols, rows=rows, seed=seed)
     png = dungeon["png"]
 
     from ..storage_quota import check_quota
@@ -126712,7 +126714,9 @@ async def settings_generate_map(
         image_url=image_url,
         thumbnail_url=None,
         grid_type=GridType.SQUARE,
-        grid_size_px=cell,
+        # Use the render cell the generator actually applied so the grid
+        # overlay lines up with the drawn cells (it caps cell at 200).
+        grid_size_px=dungeon["grid_size_px"],
         width_px=max(200, min(int(dungeon["width_px"]), 8000)),
         height_px=max(200, min(int(dungeon["height_px"]), 8000)),
         tags=["generated", biome],

@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1052.0] - 2026-08-08 — "The Surveyor's Chain"
+
+**Schema version:** 104
+
+**Commit summary:** The map generator gets a custom cols×rows size (and the render cell now matches the stored grid).
+
+**Description:** Fifth Map Generator slice. The size picker gains a **Custom…** option that reveals `Cols` / `Rows` inputs, so a GM can generate a map at an exact cell dimension instead of the three fixed presets. Values are clamped server-side to `[10, 8000/cell]` cols and `[8, …]` rows so the image never breaches the 8000 px `Map` dimension invariant.
+
+**Also fixes** a latent alignment bug this touched: the endpoint clamped `grid_size_px` to 300 while the renderer caps the cell at 200, so a grid size above 200 stored a `grid_size_px` that didn't match the drawn cells (the overlay would drift). `generate_map()` now returns the render cell it actually used as `grid_size_px`, and the endpoint stores that — the overlay always lines up.
+
+### Added
+
+- **Custom size.** `generate_map(size="custom", cols=…, rows=…)` builds an arbitrary grid (clamped to keep the image ≤ 8000 px per side). The "✨ Generate a map" panel adds a **Custom…** size option that reveals `Cols`/`Rows` fields; the endpoint takes `cols`/`rows` form fields.
+
+### Changed
+
+- **`POST /campaign/{cid}/settings/maps/generate`** accepts `size=custom` + `cols`/`rows`, and now stores the generator-reported `grid_size_px` (the real render cell) on the `Map`.
+
+### Fixed
+
+- **Grid-overlay drift on generated maps** with a grid size > 200 px — the stored `grid_size_px` now equals the render cell (capped at 200), so the overlay aligns with the drawn cells.
+
+### Harness
+
+- `tests/harness/test_generate_map.py` (+1 → 10) — `test_generate_custom_size` asserts a `size=custom` 50×40 map's served PNG is exactly `50*70 × 40*70` px (parsed from the PNG IHDR).
+
 ## [2.1051.0] - 2026-08-08 — "The Draftsman's Dial"
 
 **Schema version:** 104
