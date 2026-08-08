@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1054.0] - 2026-08-08 — "The Rattling Dice"
+
+**Schema version:** 104
+
+**Commit summary:** A dying boss NPC auto-rolls its death save at the start of its turn (Phase 4b — completes NPC death saves).
+
+**Description:** Completes Phase 4 of [`death-saves.md`](docs/plans/death-saves.md). Phase 4a (v2.1053.0) put a flagged boss into the *dying* state at 0 HP; this ships the other half — the actual death saves. A PC gets a `death_save_prompt` and the player rolls; a boss NPC has no player, so it **auto-rolls** its death save at the start of its turn, the same way NPCs auto-roll every other save.
+
+When the `/battle` turn advances to a dying NPC flagged `rolls_death_saves`, `_npc_death_save_roll` resolves a flat d20 vs 10 (RAW: no modifier) through the seedable dice RNG, mirroring the PC `roll_death_save` outcomes: **nat 20** regains consciousness (HP → 1, wake), **nat 1** is two failures, **≥ 10** a success, else a failure; three failures → dead, three successes → stable. The result broadcasts as `npc_death_save` with `source: "turn_start"` plus the `raw` d20 and `outcome`. With this, a boss set to roll death saves plays out its dying turns unattended — down at 0, rolling each turn until it stabilises, dies, or a nat 20 brings it back up.
+
+### Added
+
+- **`_npc_death_save_roll`** — rolls + applies one NPC death save (seedable d20, PC-parity outcomes).
+- **Turn-start auto-roll** — the `update_battle` turn-advance hook rolls a dying flagged NPC's death save inline and broadcasts `npc_death_save` (`source: "turn_start"`, `raw`, `outcome`).
+- **Harness:** `tests/harness/test_npc_death_saves.py` (+2 → 9) — `test_turn_start_auto_rolls_death_save` (advance to a dying boss → `npc_death_save` with `source: turn_start`, counters consistent with the rolled d20) and `test_turn_start_no_roll_for_alive_boss` (a flagged-but-alive boss doesn't roll).
+
 ## [2.1053.0] - 2026-08-08 — "The Boss's Last Breath"
 
 **Schema version:** 104

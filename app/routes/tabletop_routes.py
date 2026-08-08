@@ -11735,6 +11735,47 @@ def _npc_death_save_transition(
             "status_changed": new_status != old_status, "death_saves": ds}
 
 
+def _npc_death_save_roll(target: dict) -> dict:
+    """v2.1054.0 — roll one death save for a dying boss NPC (Phase 4b of
+    ``docs/plans/death-saves.md``). A flat d20 vs 10 (RAW: no modifier),
+    through the seedable dice RNG so encounter-sim tests are deterministic.
+    Mirrors the PC ``roll_death_save`` outcomes: nat 20 regains
+    consciousness (HP → 1), nat 1 = two failures, ≥ 10 = a success, else a
+    failure; 3 failures → dead, 3 successes → stable. Mutates
+    ``target["death_saves"]`` (and ``hp_current`` on a nat 20). Returns
+    ``{outcome, raw, death_saves}``."""
+    ds = dict(target.get("death_saves") or {})
+    successes = int(ds.get("successes") or 0)
+    failures = int(ds.get("failures") or 0)
+    raw = dice_mod.get_rng().randint(1, 20)
+    if raw == 20:
+        outcome = "regain_consciousness"
+        target["hp_current"] = 1
+        new_status = "alive"
+        successes = failures = 0
+    else:
+        if raw == 1:
+            failures += 2
+            outcome = "crit_fail"
+        elif raw >= 10:
+            successes += 1
+            outcome = "success"
+        else:
+            failures += 1
+            outcome = "fail"
+        if failures >= 3:
+            new_status = "dead"
+            successes = failures = 0
+        elif successes >= 3:
+            new_status = "stable"
+            successes = failures = 0
+        else:
+            new_status = "dying"
+    new_ds = {"status": new_status, "successes": successes, "failures": failures}
+    target["death_saves"] = new_ds
+    return {"outcome": outcome, "raw": raw, "death_saves": new_ds}
+
+
 async def _apply_damage_to_combatant(
     db: Session,
     campaign_id: int,
@@ -121773,6 +121814,29 @@ async def update_battle(
                             "source": "turn_start",
                         },
                     })
+        # v2.1054.0 — Death Saves Phase 4b: a dying boss NPC has no player
+        # to prompt, so it *auto-rolls* its death save at the start of its
+        # turn (mirroring the other NPC auto-saves). Resolves inline via
+        # `_npc_death_save_roll` + broadcasts the result.
+        if (_active and not _active.get("char_id")
+                and _active.get("rolls_death_saves")):
+            _nds_cur = _active.get("death_saves") or {}
+            if (_nds_cur.get("status") or "alive") == "dying":
+                _nds_roll = _npc_death_save_roll(_active)
+                hub.set_battle(campaign_id, state)
+                await hub.broadcast(campaign_id, {
+                    "type": "npc_death_save",
+                    "data": {
+                        "combatant_id": _active.get("id"),
+                        "name": _active.get("name"),
+                        "status": _nds_roll["death_saves"]["status"],
+                        "successes": _nds_roll["death_saves"]["successes"],
+                        "failures": _nds_roll["death_saves"]["failures"],
+                        "raw": _nds_roll["raw"],
+                        "outcome": _nds_roll["outcome"],
+                        "source": "turn_start",
+                    },
+                })
         if _active and _active.get("char_id"):
             _active_buffs = _active.get("buffs") or []
             for _b in _active_buffs:

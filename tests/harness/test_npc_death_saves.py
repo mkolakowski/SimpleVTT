@@ -221,3 +221,66 @@ async def test_damage_while_dying_ticks_failure(gm_client, gm_ws, nds):
     c = await _get_combatant(gm_client, bid)
     assert c["death_saves"]["status"] == "dying", c
     assert c["death_saves"]["failures"] == 1, c
+
+
+async def _seed_dice(gm_client, seed):
+    await gm_client.post("/api/test/dice/seed", json={"seed": seed})
+
+
+async def _put_battle(gm_client, caster, boss, turn_index):
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={"combatants": [_caster_combatant(caster), boss],
+              "turn_index": turn_index, "round": 1, "active": True},
+    )
+
+
+async def test_turn_start_auto_rolls_death_save(gm_client, gm_ws, nds):
+    """Phase 4b: when the turn advances to a dying boss, it auto-rolls a
+    death save. The `npc_death_save` event carries `source: turn_start` +
+    the raw d20, and the resulting counters are consistent with that roll
+    (starting from 0/0)."""
+    bid = "tok_nds_turn"
+    boss = _boss(bid, nds["tmpl"]["id"], 0, 40, rolls=True,
+                 death_saves={"status": "dying", "successes": 0,
+                              "failures": 0})
+    # Seed on the caster's turn (index 0), then advance to the boss (1).
+    await _put_battle(gm_client, nds["caster"], boss, 0)
+    await _seed_dice(gm_client, 5)
+    try:
+        gm_ws.mark()
+        await _put_battle(gm_client, nds["caster"], boss, 1)
+        msg = await gm_ws.wait_for("npc_death_save", timeout=2.0)
+        d = msg["data"]
+        assert d["combatant_id"] == bid
+        assert d["source"] == "turn_start"
+        raw = int(d["raw"])
+        assert 1 <= raw <= 20, d
+        c = await _get_combatant(gm_client, bid)
+        ds = c["death_saves"]
+        # Counters must match the rolled d20 (RAW: flat d20 vs 10).
+        if raw == 20:
+            assert ds["status"] == "alive" and c["hp_current"] == 1, (c, d)
+        elif raw == 1:
+            assert ds["failures"] == 2, (ds, d)
+        elif raw >= 10:
+            assert ds["successes"] == 1, (ds, d)
+        else:
+            assert ds["failures"] == 1, (ds, d)
+    finally:
+        await _seed_dice(gm_client, None)
+
+
+async def test_turn_start_no_roll_for_alive_boss(gm_client, gm_ws, nds):
+    """A flagged boss that is NOT dying (alive) does not auto-roll on its
+    turn — pins the gate so healthy bosses don't spam death saves."""
+    bid = "tok_nds_alive"
+    boss = _boss(bid, nds["tmpl"]["id"], 40, 40, rolls=True,
+                 death_saves={"status": "alive", "successes": 0,
+                              "failures": 0})
+    await _put_battle(gm_client, nds["caster"], boss, 0)
+    gm_ws.mark()
+    await _put_battle(gm_client, nds["caster"], boss, 1)
+    import asyncio
+    await asyncio.sleep(0.3)
+    assert not gm_ws.buffered("npc_death_save"), "alive boss should not roll"
