@@ -817,6 +817,59 @@
             </script>
         </form>
     </details>
+
+    {# v2.1048.0 — Procedural map generator. Draws a dungeon battle map
+       server-side (no upload) and adds it as a Map. #}
+    <details style="margin-top:6px;">
+        <summary style="cursor:pointer;font-size:13px;">✨ Generate a map</summary>
+        <form id="gen-map-form" class="stacked" style="margin-top:8px;max-width:480px;"
+              onsubmit="return false;">
+            <p style="font-size:11px;color:var(--fg-mute);margin:0;">
+                Build a random dungeon — rooms, corridors and doors — with no
+                external image. Drop in a seed to reproduce the same layout.
+            </p>
+            <label>Name <input name="name" placeholder="Optional — defaults to “Generated … Dungeon”"></label>
+            <label>Size
+                <select name="size">
+                    <option value="small">Small (24×18)</option>
+                    <option value="medium" selected>Medium (32×24)</option>
+                    <option value="large">Large (44×32)</option>
+                </select>
+            </label>
+            <label>Grid size (px) <input type="number" name="grid_size_px" value="70" min="20" max="300" style="width:80px;"></label>
+            <label>Seed <input type="number" name="seed" placeholder="Optional — for a repeatable map" style="width:140px;"></label>
+            <div><button type="submit" id="gen-map-btn">Generate</button></div>
+            <div id="gen-map-status" style="display:none;font-size:11px;color:var(--fg-mute);margin-top:8px;">Generating…</div>
+            <script>
+            (function() {
+                const form = document.getElementById('gen-map-form');
+                const btn = document.getElementById('gen-map-btn');
+                const status = document.getElementById('gen-map-status');
+                if (!form) return;
+                function esc(s){const d=document.createElement('div');d.textContent=s==null?'':String(s);return d.innerHTML;}
+                btn.addEventListener('click', () => {
+                    const fd = new FormData();
+                    fd.append('name', form.name.value);
+                    fd.append('size', form.size.value);
+                    fd.append('grid_size_px', form.grid_size_px.value);
+                    if (form.seed.value !== '') fd.append('seed', form.seed.value);
+                    btn.disabled = true; status.style.display=''; status.textContent = 'Generating…';
+                    const xhr = new XMLHttpRequest();
+                    xhr.open('POST', '/campaign/{{ campaign.id }}/settings/maps/generate');
+                    xhr.onload = () => {
+                        btn.disabled = false;
+                        let d = {}; try { d = JSON.parse(xhr.responseText); } catch(_) {}
+                        if (xhr.status !== 200 || !d.ok) { status.textContent = 'Generation failed (' + xhr.status + ').'; return; }
+                        status.innerHTML = '✅ Created ' + esc(d.map && d.map.name) + '.';
+                        setTimeout(() => location.reload(), 900);
+                    };
+                    xhr.onerror = () => { btn.disabled = false; status.textContent = 'Generation failed.'; };
+                    xhr.send(fd);
+                });
+            })();
+            </script>
+        </form>
+    </details>
 </section>
 
 <!-- ── Encounter background (campaign default) ── -->

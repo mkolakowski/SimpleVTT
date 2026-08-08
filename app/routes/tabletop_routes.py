@@ -126661,6 +126661,70 @@ async def settings_bulk_upload_maps(
     }
 
 
+@router.post("/campaign/{campaign_id}/settings/maps/generate")
+async def settings_generate_map(
+    campaign_id: int,
+    name: str = Form(""),
+    size: str = Form("medium"),
+    grid_size_px: int = Form(70),
+    seed: Optional[int] = Form(None),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+    _uploads_gate: None = Depends(require_uploads_enabled),
+):
+    """v2.1048.0 — procedurally generate a dungeon battle map server-side
+    (no external upload) and create a Map row from it. Mirrors
+    ``settings_upload_map``'s disk/URL/Map-row contract; the difference is
+    the PNG is drawn by ``app.map_generator`` instead of read from an
+    uploaded file."""
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+
+    from ..map_generator import generate_dungeon_png, size_presets
+
+    if size not in size_presets():
+        raise HTTPException(400, "Unknown size")
+    cell = max(20, min(int(grid_size_px), 300))
+    png, width_px, height_px = generate_dungeon_png(
+        size=size, cell_px=cell, seed=seed
+    )
+
+    from ..storage_quota import check_quota
+    _q = check_quota(db, campaign_id, len(png))
+    if _q:
+        raise HTTPException(413, _q)
+
+    _MAP_DIR.mkdir(parents=True, exist_ok=True)
+    stem = uuid.uuid4().hex
+    (_MAP_DIR / f"{stem}.png").write_bytes(png)
+    image_url = f"/static/uploads/maps/{stem}.png"
+
+    m = Map(
+        campaign_id=campaign_id,
+        name=(name.strip()[:120] or f"Generated {size.title()} Dungeon"),
+        image_url=image_url,
+        thumbnail_url=None,
+        grid_type=GridType.SQUARE,
+        grid_size_px=cell,
+        width_px=max(200, min(int(width_px), 8000)),
+        height_px=max(200, min(int(height_px), 8000)),
+        tags=["generated"],
+        folder="",
+        show_grid=True,
+    )
+    db.add(m)
+    db.commit()
+    db.refresh(m)
+    if not campaign.active_map_id:
+        campaign.active_map_id = m.id
+        db.commit()
+    return {
+        "ok": True,
+        "map": {"id": m.id, "name": m.name, "image_url": m.image_url},
+    }
+
+
 @router.post("/campaign/{campaign_id}/settings/maps/{map_id}/rename")
 async def settings_rename_map(
     campaign_id: int,

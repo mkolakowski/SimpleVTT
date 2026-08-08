@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1048.0] - 2026-08-08 — "The Cartwright's Compass"
+
+**Schema version:** 104
+
+**Commit summary:** Procedurally generate a dungeon battle map server-side — no external upload.
+
+**Description:** Opens the long-filed **Map Generator** feature. A GM can now build a playable dungeon battle map without sourcing or uploading an image: `POST /campaign/{cid}/settings/maps/generate` draws a random dungeon — non-overlapping rooms, L-shaped connecting corridors, and doors at the room thresholds — to a PNG entirely server-side (`app/map_generator.py`, using Pillow), writes it under `static/uploads/maps/`, and creates a `Map` row from it exactly like an uploaded image. The drawn cells align to the map's grid (`grid_size_px`), so the in-app grid overlay lines up and tokens drop straight onto it.
+
+The generator is seeded: passing a `seed` reproduces the same layout byte-for-byte, which is what the harness pins. Three size presets ship — Small (24×18), Medium (32×24), Large (44×32) — all well under the 8000 px `Map` dimension clamp at the default 70 px/cell. Grid overlay lines are deliberately **not** baked into the PNG; the tabletop draws its own overlay from `show_grid`, and baking a second grid would double it.
+
+Surfaced in campaign settings under **✨ Generate a map** (next to the bulk-upload panel): name, size, grid size, and an optional seed, POSTed via XHR with a live status line and an auto-reload on success. This is the minimum-viable slice from the TODO's Map Generator item (dungeon rooms + corridors + doors rendered to a canvas); biome presets and functional wall-segment population (feeding the Maps 2.0 line-of-sight engine) remain filed as follow-ups.
+
+### Added
+
+- **Procedural dungeon map generator.** `app/map_generator.py` — `generate_dungeon_png(size, cell_px, seed)` returns `(png_bytes, width_px, height_px)`; a seeded random-room dungeon (rooms → corridors → doors) rendered with Pillow.
+- **`POST /campaign/{cid}/settings/maps/generate`** — GM-only endpoint that generates the PNG, stores it under `static/uploads/maps/`, and creates a `Map` row (`grid_type=square`, `show_grid=true`, `tags=["generated"]`). Returns `{ok, map: {id, name, image_url}}`. 400 on unknown size, 403 for players, 413 on storage quota.
+- **"✨ Generate a map" panel** in campaign settings (`campaign_settings.html`) — name / size / grid-size / seed inputs, XHR submit with status + auto-reload.
+- **Harness:** `tests/harness/test_generate_map.py` (5) — happy-path (JSON shape + the PNG is actually served), default-name, seed determinism (same seed → byte-identical image), 400 unknown-size, 403 player.
+
 ## [2.1047.9] - 2026-08-07 — "The Chalk Line"
 
 **Schema version:** 104

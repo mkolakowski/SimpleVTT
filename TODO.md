@@ -902,8 +902,12 @@ Shipped end-to-end — see [`TODONE.md`](TODONE.md) → Combat. Creature picker 
 ### Bulk Map Upload — ✅ DONE (v2.1024.0 "The Cartographer's Haul")
 `POST /campaign/{cid}/settings/maps/bulk` + the "➕ Bulk upload maps" panel in campaign settings let a GM pick several images at once → a Map per file (name derived from the filename), all sharing the chosen grid settings, with an XHR progress bar + per-file ✅/⚠️ result list; bad files are skipped (recorded in `errors`) not fatal. Harness: `test_bulk_map_upload.py` (4). *Possible follow-up:* per-file name/grid override before committing (currently one shared grid + filename-derived names).
 
-### Map Generator
-Procedural in-browser map generation — produce a playable battle map without any external upload. Minimum viable output: a dungeon room layout (walls, corridors, door placements) rendered to a canvas the GM can place tokens on immediately. Stretch goals: biome presets (dungeon, wilderness, tavern interior), adjustable density/size parameters, and one-click export as a PNG that feeds into the existing map upload flow.
+### Map Generator — 🟠 MVP shipped v2.1048.0 "The Cartwright's Compass"
+Procedural map generation — produce a playable battle map without any external upload. **MVP done:** `POST /campaign/{cid}/settings/maps/generate` (+ the "✨ Generate a map" settings panel) draws a random dungeon — non-overlapping rooms, L-shaped corridors, doors at room thresholds — server-side to a PNG (`app/map_generator.py`, Pillow), stores it under `static/uploads/maps/`, and creates a `Map` row aligned to the grid, exactly like an uploaded image. Seeded → reproducible; three size presets (small/medium/large). Harness: `test_generate_map.py` (5).
+**Remaining follow-ups (filed):**
+- **Biome presets** — wilderness, tavern interior, cave (currently dungeon-only).
+- **Functional wall-segment population** — emit `Map.walls` from the generated layout so the Maps 2.0 line-of-sight / door engine works on generated maps (currently the walls are only drawn into the PNG, not interactive).
+- **Density/size sliders** — adjustable room count / corridor width beyond the three presets.
 
 ### Bundled Art Assets (Maps, Player Tokens, Monster Tokens)
 Source and bundle a starter set of free-to-use art so new campaigns have something to work with out of the box. Three separate asset packs:
