@@ -825,10 +825,19 @@
         <form id="gen-map-form" class="stacked" style="margin-top:8px;max-width:480px;"
               onsubmit="return false;">
             <p style="font-size:11px;color:var(--fg-mute);margin:0;">
-                Build a random dungeon — rooms, corridors and doors — with no
-                external image. Drop in a seed to reproduce the same layout.
+                Build a random map — rooms, caverns or open field with
+                functional walls and doors — with no external image. Drop in
+                a seed to reproduce the same layout.
             </p>
-            <label>Name <input name="name" placeholder="Optional — defaults to “Generated … Dungeon”"></label>
+            <label>Name <input name="name" placeholder="Optional — defaults to “Generated …”"></label>
+            <label>Biome
+                <select name="biome">
+                    <option value="dungeon" selected>Dungeon</option>
+                    <option value="cave">Cave</option>
+                    <option value="wilderness">Wilderness</option>
+                    <option value="tavern">Tavern</option>
+                </select>
+            </label>
             <label>Size
                 <select name="size">
                     <option value="small">Small (24×18)</option>
@@ -850,6 +859,7 @@
                 btn.addEventListener('click', () => {
                     const fd = new FormData();
                     fd.append('name', form.name.value);
+                    fd.append('biome', form.biome.value);
                     fd.append('size', form.size.value);
                     fd.append('grid_size_px', form.grid_size_px.value);
                     if (form.seed.value !== '') fd.append('seed', form.seed.value);

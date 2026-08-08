@@ -10,6 +10,33 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1050.0] - 2026-08-08 — "The Cartographer's Palette"
+
+**Schema version:** 104
+
+**Commit summary:** The map generator gains four biomes — dungeon, cave, wilderness, tavern.
+
+**Description:** Third slice of the Map Generator (after v2.1048.0 / v2.1049.0). The generator was dungeon-only; it now offers a **biome** picker, each biome pairing its own layout algorithm with a render palette:
+
+- **Dungeon** — the original random rooms + corridors + doors, cool stone palette.
+- **Cave** — organic caverns via cellular automata (random-fill → 5 smoothing passes), pruned to the single largest connected region so it's always traversable. Earthy palette, no doors.
+- **Wilderness** — an open field scattered with obstacle clumps (boulders / thickets grown by short random walks) that block sight. Grass palette, no doors.
+- **Tavern** — one walled building split by a partition wall with a door gap into a main hall + back room. Wood palette.
+
+All four flow through the same wall-emission pipeline shipped in v2.1049.0, so every biome gets functional Maps 2.0 walls (and, where it has them, toggleable doors) for free. Generation stays fully seeded — the same `seed` + `biome` reproduces the map byte-for-byte.
+
+`app/map_generator.py` grows a `_BIOMES` registry (palette + generator key + label) and a `generate_map(size, biome, cell_px, seed)` entry point; `generate_dungeon` / `generate_dungeon_png` remain as dungeon-biome back-compat wrappers. The endpoint takes a `biome` form field (400 on an unknown biome), tags the map with its biome, and names it `"Generated {Biome}"`. The "✨ Generate a map" settings panel gains the biome dropdown.
+
+### Added
+
+- **Four map-generator biomes.** `_gen_dungeon` / `_gen_cave` / `_gen_wilderness` / `_gen_tavern` in `app/map_generator.py`, dispatched by a `_BIOMES` registry; `biomes()` exposes the list for the UI. Cave uses cellular-automata + a largest-connected-region prune (`_largest_region`); wilderness scatters random-walk obstacle clumps; tavern subdivides one room with a doored partition.
+- **`generate_map(size, biome, cell_px, seed)`** — the new biome-aware entry point (returns `{png, width_px, height_px, walls}`).
+
+### Changed
+
+- **`POST /campaign/{cid}/settings/maps/generate`** accepts a `biome` field (dungeon / cave / wilderness / tavern; 400 on unknown), tags the map with the biome, and names it `"Generated {Biome}"`. The settings panel adds a biome `<select>`.
+- **Harness:** `tests/harness/test_generate_map.py` (+2 → 8) — `test_generate_all_biomes` (every biome returns 200 + walls + the biome-derived name) and `test_generate_bad_biome` (400). `test_generate_default_name` updated to the new `"Generated Dungeon"` default.
+
 ## [2.1049.0] - 2026-08-08 — "The Load-Bearing Wall"
 
 **Schema version:** 104

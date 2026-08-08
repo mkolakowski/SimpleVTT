@@ -126666,27 +126666,31 @@ async def settings_generate_map(
     campaign_id: int,
     name: str = Form(""),
     size: str = Form("medium"),
+    biome: str = Form("dungeon"),
     grid_size_px: int = Form(70),
     seed: Optional[int] = Form(None),
     db: Session = Depends(get_db),
     user: User = Depends(require_user),
     _uploads_gate: None = Depends(require_uploads_enabled),
 ):
-    """v2.1048.0 — procedurally generate a dungeon battle map server-side
-    (no external upload) and create a Map row from it. Mirrors
+    """v2.1048.0 — procedurally generate a battle map server-side (no
+    external upload) and create a Map row from it. Mirrors
     ``settings_upload_map``'s disk/URL/Map-row contract; the difference is
     the PNG is drawn by ``app.map_generator`` instead of read from an
-    uploaded file."""
+    uploaded file. v2.1050.0 — ``biome`` selects the layout + palette
+    (dungeon / cave / wilderness / tavern)."""
     campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
     if not campaign or not _user_is_gm(user, campaign, db):
         raise HTTPException(403, "GM only")
 
-    from ..map_generator import generate_dungeon, size_presets
+    from ..map_generator import generate_map, size_presets, biomes
 
     if size not in size_presets():
         raise HTTPException(400, "Unknown size")
+    if biome not in {b["key"] for b in biomes()}:
+        raise HTTPException(400, "Unknown biome")
     cell = max(20, min(int(grid_size_px), 300))
-    dungeon = generate_dungeon(size=size, cell_px=cell, seed=seed)
+    dungeon = generate_map(size=size, biome=biome, cell_px=cell, seed=seed)
     png = dungeon["png"]
 
     from ..storage_quota import check_quota
@@ -126701,14 +126705,14 @@ async def settings_generate_map(
 
     m = Map(
         campaign_id=campaign_id,
-        name=(name.strip()[:120] or f"Generated {size.title()} Dungeon"),
+        name=(name.strip()[:120] or f"Generated {biome.title()}"),
         image_url=image_url,
         thumbnail_url=None,
         grid_type=GridType.SQUARE,
         grid_size_px=cell,
         width_px=max(200, min(int(dungeon["width_px"]), 8000)),
         height_px=max(200, min(int(dungeon["height_px"]), 8000)),
-        tags=["generated"],
+        tags=["generated", biome],
         folder="",
         show_grid=True,
         # v2.1049.0 — functional walls: solid segments trace the room /

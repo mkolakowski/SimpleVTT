@@ -90,9 +90,34 @@ async def test_generate_default_name(gm_client):
     d = r.json()
     mid = d["map"]["id"]
     try:
-        assert d["map"]["name"] == "Generated Medium Dungeon", d
+        assert d["map"]["name"] == "Generated Dungeon", d
     finally:
         await _delete_map(gm_client, mid)
+
+
+async def test_generate_all_biomes(gm_client):
+    """Each biome produces a valid map with walls (caves / wilderness have
+    no doors; dungeon / tavern do)."""
+    for biome in ("dungeon", "cave", "wilderness", "tavern"):
+        r = await gm_client.post(
+            f"/campaign/{CAMPAIGN_ID}/settings/maps/generate",
+            data={"biome": biome, "size": "small", "seed": "3"},
+        )
+        assert r.status_code == 200, (biome, r.text)
+        m = r.json()["map"]
+        try:
+            assert m["name"] == f"Generated {biome.title()}", m
+            assert m["walls"] > 0, (biome, m)
+        finally:
+            await _delete_map(gm_client, m["id"])
+
+
+async def test_generate_bad_biome(gm_client):
+    r = await gm_client.post(
+        f"/campaign/{CAMPAIGN_ID}/settings/maps/generate",
+        data={"biome": "spaceship", "size": "small"},
+    )
+    assert r.status_code == 400, r.text
 
 
 async def test_generate_is_deterministic(gm_client):

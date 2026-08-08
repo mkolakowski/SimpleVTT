@@ -38,19 +38,50 @@ _SIZE_PRESETS: dict[str, tuple[int, int]] = {
 }
 _DEFAULT_SIZE = "medium"
 
-# Render palette (RGB). A dark dungeon read: near-black rock, cool stone
-# floor, black wall edges, and a warm door.
-_ROCK = (24, 26, 32)
-_FLOOR_A = (58, 64, 76)
-_FLOOR_B = (52, 58, 70)  # alternating cell tint for a faint flagstone texture
-_WALL = (14, 15, 19)
-_DOOR = (138, 94, 52)
-_DOOR_EDGE = (92, 60, 30)
+# --- Biome registry. Each biome pairs a generation style with a render
+# palette (RGB). ``rock`` is the non-floor fill (dungeon stone / cave
+# earth / tree canopy / tavern void), ``floor_a``/``floor_b`` the
+# alternating floor tint (a faint flagstone/grass texture), ``wall`` the
+# boundary stroke, and ``door``/``door_edge`` the doorway plank. ``gen``
+# names the layout function; ``label`` is the human name for the UI. ---
+_BIOMES: dict[str, dict] = {
+    "dungeon": {
+        "label": "Dungeon",
+        "gen": "dungeon",
+        "rock": (24, 26, 32), "floor_a": (58, 64, 76), "floor_b": (52, 58, 70),
+        "wall": (14, 15, 19), "door": (138, 94, 52), "door_edge": (92, 60, 30),
+    },
+    "cave": {
+        "label": "Cave",
+        "gen": "cave",
+        "rock": (30, 24, 20), "floor_a": (74, 62, 48), "floor_b": (66, 55, 42),
+        "wall": (18, 14, 10), "door": (138, 94, 52), "door_edge": (92, 60, 30),
+    },
+    "wilderness": {
+        "label": "Wilderness",
+        "gen": "wilderness",
+        "rock": (40, 54, 34), "floor_a": (86, 112, 64), "floor_b": (78, 104, 58),
+        "wall": (24, 34, 20), "door": (138, 94, 52), "door_edge": (92, 60, 30),
+    },
+    "tavern": {
+        "label": "Tavern",
+        "gen": "tavern",
+        "rock": (26, 20, 14), "floor_a": (120, 86, 54), "floor_b": (108, 76, 46),
+        "wall": (58, 38, 22), "door": (156, 116, 70), "door_edge": (104, 72, 38),
+    },
+}
+_DEFAULT_BIOME = "dungeon"
 
 
 def size_presets() -> list[str]:
     """The valid ``size`` keys, in ascending order — for UI + validation."""
     return list(_SIZE_PRESETS.keys())
+
+
+def biomes() -> list[dict]:
+    """The available biomes as ``{"key", "label"}`` dicts — for the UI +
+    validation."""
+    return [{"key": k, "label": v["label"]} for k, v in _BIOMES.items()]
 
 
 def _carve_room(grid: list[list[bool]], x: int, y: int, w: int, h: int) -> None:
@@ -78,9 +109,9 @@ def _carve_v_corridor(grid: list[list[bool]], y1: int, y2: int, x: int) -> None:
         grid[cy][x] = True
 
 
-def _generate_layout(cols: int, rows: int, rng: random.Random):
+def _gen_dungeon(cols: int, rows: int, rng: random.Random):
     """Return ``(grid, doors)`` — ``grid[y][x]`` True = floor; ``doors`` a
-    list of ``(x, y)`` cells drawn as doorways."""
+    list of door dicts. Classic random-room-and-corridor dungeon."""
     grid = [[False] * cols for _ in range(rows)]
     rooms: list[tuple[int, int, int, int]] = []
 
@@ -115,6 +146,105 @@ def _generate_layout(cols: int, rows: int, rng: random.Random):
             _carve_h_corridor(grid, x1, x2, y2)
 
     doors = _place_doors(grid, rooms, rng)
+    return grid, doors
+
+
+def _largest_region(grid) -> None:
+    """In-place: keep only the largest 4-connected floor region, filling
+    every smaller pocket back to rock. Guarantees a single traversable
+    area (used by the cave biome)."""
+    rows = len(grid)
+    cols = len(grid[0]) if rows else 0
+    seen = [[False] * cols for _ in range(rows)]
+    best: list[tuple[int, int]] = []
+    for sy in range(rows):
+        for sx in range(cols):
+            if not grid[sy][sx] or seen[sy][sx]:
+                continue
+            stack = [(sx, sy)]
+            seen[sy][sx] = True
+            region = []
+            while stack:
+                x, y = stack.pop()
+                region.append((x, y))
+                for nx, ny in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+                    if 0 <= nx < cols and 0 <= ny < rows and grid[ny][nx] and not seen[ny][nx]:
+                        seen[ny][nx] = True
+                        stack.append((nx, ny))
+            if len(region) > len(best):
+                best = region
+    keep = set(best)
+    for y in range(rows):
+        for x in range(cols):
+            if grid[y][x] and (x, y) not in keep:
+                grid[y][x] = False
+
+
+def _gen_cave(cols: int, rows: int, rng: random.Random):
+    """Organic caverns via cellular automata, then prune to the largest
+    connected region. Caves have no doors."""
+    # Random fill (~55% floor), with a solid rock border.
+    grid = [[(0 < x < cols - 1 and 0 < y < rows - 1 and rng.random() > 0.45)
+             for x in range(cols)] for y in range(rows)]
+    for _ in range(5):
+        nxt = [[False] * cols for _ in range(rows)]
+        for y in range(rows):
+            for x in range(cols):
+                walls = 0
+                for dy in (-1, 0, 1):
+                    for dx in (-1, 0, 1):
+                        if dx == 0 and dy == 0:
+                            continue
+                        nx, ny = x + dx, y + dy
+                        if not (0 <= nx < cols and 0 <= ny < rows) or not grid[ny][nx]:
+                            walls += 1
+                nxt[y][x] = walls < 5  # floor unless hemmed in by rock
+        grid = nxt
+    _largest_region(grid)
+    return grid, []
+
+
+def _gen_wilderness(cols: int, rows: int, rng: random.Random):
+    """Open field scattered with obstacle clumps (boulders / thickets)
+    that block sight. No doors."""
+    grid = [[True] * cols for _ in range(rows)]
+    clumps = max(4, (cols * rows) // 45)
+    for _ in range(clumps):
+        x = rng.randint(1, cols - 2)
+        y = rng.randint(1, rows - 2)
+        for _ in range(rng.randint(3, 8)):
+            if 0 < x < cols - 1 and 0 < y < rows - 1:
+                grid[y][x] = False
+            x += rng.randint(-1, 1)
+            y += rng.randint(-1, 1)
+    return grid, []
+
+
+def _gen_tavern(cols: int, rows: int, rng: random.Random):
+    """A single walled building subdivided by one partition wall with a
+    door gap — a main hall + a back room."""
+    grid = [[False] * cols for _ in range(rows)]
+    rx, ry, rw, rh = 1, 1, cols - 2, rows - 2
+    _carve_room(grid, rx, ry, rw, rh)
+    doors: list[dict] = []
+
+    if rng.random() < 0.5 and rw >= 8:
+        # Vertical partition: passage crosses it horizontally, so the door
+        # is a vertical threshold segment at the gap cell's left edge.
+        px = rng.randint(rx + 3, rx + rw - 4)
+        gap = rng.randint(ry + 1, ry + rh - 2)
+        for y in range(ry, ry + rh):
+            if y != gap:
+                grid[y][px] = False
+        doors.append({"cx": px, "cy": gap, "edge": ("v", px, gap)})
+    elif rh >= 8:
+        # Horizontal partition: door is a horizontal threshold at the gap.
+        py = rng.randint(ry + 3, ry + rh - 4)
+        gap = rng.randint(rx + 1, rx + rw - 2)
+        for x in range(rx, rx + rw):
+            if x != gap:
+                grid[py][x] = False
+        doors.append({"cx": gap, "cy": py, "edge": ("h", py, gap)})
     return grid, doors
 
 
@@ -230,22 +360,24 @@ def _wall_segments(grid, doors, cell: int) -> list[dict]:
     return walls
 
 
-def _render(grid, doors, cell: int) -> bytes:
+def _render(grid, doors, cell: int, palette: dict) -> bytes:
     rows = len(grid)
     cols = len(grid[0]) if rows else 0
-    img = Image.new("RGB", (cols * cell, rows * cell), _ROCK)
+    img = Image.new("RGB", (cols * cell, rows * cell), palette["rock"])
     draw = ImageDraw.Draw(img)
 
-    # Floor cells with a faint checker so flagstones read at a glance.
+    # Floor cells with a faint checker so the surface texture reads.
+    floor_a, floor_b = palette["floor_a"], palette["floor_b"]
     for y in range(rows):
         for x in range(cols):
             if not grid[y][x]:
                 continue
             px, py = x * cell, y * cell
-            tint = _FLOOR_A if (x + y) % 2 == 0 else _FLOOR_B
+            tint = floor_a if (x + y) % 2 == 0 else floor_b
             draw.rectangle([px, py, px + cell - 1, py + cell - 1], fill=tint)
 
     # Wall edges: any floor/non-floor boundary gets a thick dark stroke.
+    wall_col = palette["wall"]
     wall_w = max(3, cell // 16)
     for y in range(rows):
         for x in range(cols):
@@ -253,21 +385,22 @@ def _render(grid, doors, cell: int) -> bytes:
                 continue
             px, py = x * cell, y * cell
             if y == 0 or not grid[y - 1][x]:
-                draw.line([px, py, px + cell, py], fill=_WALL, width=wall_w)
+                draw.line([px, py, px + cell, py], fill=wall_col, width=wall_w)
             if y == rows - 1 or not grid[y + 1][x]:
-                draw.line([px, py + cell, px + cell, py + cell], fill=_WALL, width=wall_w)
+                draw.line([px, py + cell, px + cell, py + cell], fill=wall_col, width=wall_w)
             if x == 0 or not grid[y][x - 1]:
-                draw.line([px, py, px, py + cell], fill=_WALL, width=wall_w)
+                draw.line([px, py, px, py + cell], fill=wall_col, width=wall_w)
             if x == cols - 1 or not grid[y][x + 1]:
-                draw.line([px + cell, py, px + cell, py + cell], fill=_WALL, width=wall_w)
+                draw.line([px + cell, py, px + cell, py + cell], fill=wall_col, width=wall_w)
 
     # Doors: a warm plank set into the doorway cell.
     inset = cell // 4
+    door_col, door_edge = palette["door"], palette["door_edge"]
     for d in doors:
         px, py = d["cx"] * cell, d["cy"] * cell
         draw.rectangle(
             [px + inset, py + inset, px + cell - inset, py + cell - inset],
-            fill=_DOOR, outline=_DOOR_EDGE, width=max(2, cell // 24),
+            fill=door_col, outline=door_edge, width=max(2, cell // 24),
         )
 
     buf = io.BytesIO()
@@ -275,40 +408,54 @@ def _render(grid, doors, cell: int) -> bytes:
     return buf.getvalue()
 
 
-def generate_dungeon(
+_GENERATORS = {
+    "dungeon": _gen_dungeon,
+    "cave": _gen_cave,
+    "wilderness": _gen_wilderness,
+    "tavern": _gen_tavern,
+}
+
+
+def generate_map(
     *,
     size: str = _DEFAULT_SIZE,
+    biome: str = _DEFAULT_BIOME,
     cell_px: int = 70,
     seed: Optional[int] = None,
 ) -> dict:
-    """Generate a dungeon battle map with functional walls.
+    """Generate a battle map with functional walls.
 
     Returns ``{"png": bytes, "width_px": int, "height_px": int,
     "walls": list}`` — the ``walls`` list is the Maps 2.0 line-of-sight
     format (pixel-coord solid segments + toggleable door segments), ready
-    to store on ``Map.walls``. ``size`` is one of :func:`size_presets`;
-    an unknown value falls back to ``medium``. ``seed`` makes the output
-    deterministic (same seed → same map + same walls).
+    to store on ``Map.walls``. ``size`` is one of :func:`size_presets`
+    and ``biome`` one of :func:`biomes`; unknown values fall back to the
+    defaults. ``seed`` makes the output deterministic (same seed + biome →
+    same map + same walls).
     """
     cols, rows = _SIZE_PRESETS.get(size, _SIZE_PRESETS[_DEFAULT_SIZE])
+    cfg = _BIOMES.get(biome, _BIOMES[_DEFAULT_BIOME])
     cell = max(20, min(int(cell_px), 200))
     rng = random.Random(seed)
-    grid, doors = _generate_layout(cols, rows, rng)
+    grid, doors = _GENERATORS[cfg["gen"]](cols, rows, rng)
     return {
-        "png": _render(grid, doors, cell),
+        "png": _render(grid, doors, cell, cfg),
         "width_px": cols * cell,
         "height_px": rows * cell,
         "walls": _wall_segments(grid, doors, cell),
     }
 
 
+def generate_dungeon(
+    *, size: str = _DEFAULT_SIZE, cell_px: int = 70, seed: Optional[int] = None,
+) -> dict:
+    """Back-compat alias for :func:`generate_map` with the dungeon biome."""
+    return generate_map(size=size, biome="dungeon", cell_px=cell_px, seed=seed)
+
+
 def generate_dungeon_png(
-    *,
-    size: str = _DEFAULT_SIZE,
-    cell_px: int = 70,
-    seed: Optional[int] = None,
+    *, size: str = _DEFAULT_SIZE, cell_px: int = 70, seed: Optional[int] = None,
 ) -> tuple[bytes, int, int]:
-    """Back-compat thin wrapper over :func:`generate_dungeon` returning
-    just ``(png_bytes, width_px, height_px)``."""
+    """Back-compat thin wrapper returning just ``(png, width, height)``."""
     d = generate_dungeon(size=size, cell_px=cell_px, seed=seed)
     return d["png"], d["width_px"], d["height_px"]
