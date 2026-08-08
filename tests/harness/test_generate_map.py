@@ -120,6 +120,34 @@ async def test_generate_bad_biome(gm_client):
     assert r.status_code == 400, r.text
 
 
+async def test_generate_density_changes_map(gm_client):
+    """Sparse vs dense (same biome + seed) produces different maps; an
+    out-of-range density is clamped, not rejected."""
+    ids, imgs = [], []
+    try:
+        for dens in ("0", "100"):
+            r = await gm_client.post(
+                f"/campaign/{CAMPAIGN_ID}/settings/maps/generate",
+                data={"biome": "wilderness", "size": "medium",
+                      "density": dens, "seed": "5"},
+            )
+            assert r.status_code == 200, (dens, r.text)
+            m = r.json()["map"]
+            ids.append(m["id"])
+            imgs.append((await gm_client.get(m["image_url"])).content)
+        assert imgs[0] != imgs[1], "density should change the map"
+        # Out-of-range density is clamped to [0,100], still a 200.
+        r = await gm_client.post(
+            f"/campaign/{CAMPAIGN_ID}/settings/maps/generate",
+            data={"biome": "dungeon", "size": "small", "density": "999"},
+        )
+        assert r.status_code == 200, r.text
+        ids.append(r.json()["map"]["id"])
+    finally:
+        for mid in ids:
+            await _delete_map(gm_client, mid)
+
+
 async def test_generate_is_deterministic(gm_client):
     ids, imgs = [], []
     try:

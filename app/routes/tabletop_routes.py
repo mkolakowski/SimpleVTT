@@ -126667,6 +126667,7 @@ async def settings_generate_map(
     name: str = Form(""),
     size: str = Form("medium"),
     biome: str = Form("dungeon"),
+    density: int = Form(50),
     grid_size_px: int = Form(70),
     seed: Optional[int] = Form(None),
     db: Session = Depends(get_db),
@@ -126690,7 +126691,9 @@ async def settings_generate_map(
     if biome not in {b["key"] for b in biomes()}:
         raise HTTPException(400, "Unknown biome")
     cell = max(20, min(int(grid_size_px), 300))
-    dungeon = generate_map(size=size, biome=biome, cell_px=cell, seed=seed)
+    dens = max(0, min(int(density), 100)) / 100.0
+    dungeon = generate_map(
+        size=size, biome=biome, density=dens, cell_px=cell, seed=seed)
     png = dungeon["png"]
 
     from ..storage_quota import check_quota

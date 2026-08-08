@@ -109,15 +109,16 @@ def _carve_v_corridor(grid: list[list[bool]], y1: int, y2: int, x: int) -> None:
         grid[cy][x] = True
 
 
-def _gen_dungeon(cols: int, rows: int, rng: random.Random):
+def _gen_dungeon(cols: int, rows: int, rng: random.Random, density: float = 0.5):
     """Return ``(grid, doors)`` — ``grid[y][x]`` True = floor; ``doors`` a
-    list of door dicts. Classic random-room-and-corridor dungeon."""
+    list of door dicts. Classic random-room-and-corridor dungeon.
+    ``density`` scales how many rooms are attempted (0 = sparse, 1 = packed)."""
     grid = [[False] * cols for _ in range(rows)]
     rooms: list[tuple[int, int, int, int]] = []
 
-    # Attempt a room count that scales with area; the overlap rejection
-    # naturally caps how many actually land on a crowded grid.
-    attempts = max(8, (cols * rows) // 40)
+    # Attempt a room count that scales with area *and* the density knob;
+    # the overlap rejection naturally caps how many actually land.
+    attempts = max(4, int((cols * rows) // 40 * (0.5 + density)))
     for _ in range(attempts):
         w = rng.randint(4, 8)
         h = rng.randint(3, 6)
@@ -180,11 +181,14 @@ def _largest_region(grid) -> None:
                 grid[y][x] = False
 
 
-def _gen_cave(cols: int, rows: int, rng: random.Random):
+def _gen_cave(cols: int, rows: int, rng: random.Random, density: float = 0.5):
     """Organic caverns via cellular automata, then prune to the largest
-    connected region. Caves have no doors."""
-    # Random fill (~55% floor), with a solid rock border.
-    grid = [[(0 < x < cols - 1 and 0 < y < rows - 1 and rng.random() > 0.45)
+    connected region. Caves have no doors. ``density`` tightens the cave:
+    higher = more rock, narrower passages."""
+    # Random fill with a solid rock border. Wall probability climbs with
+    # density (0.40 → wide-open cavern, 0.55 → tight warren).
+    wall_p = 0.40 + 0.15 * density
+    grid = [[(0 < x < cols - 1 and 0 < y < rows - 1 and rng.random() > wall_p)
              for x in range(cols)] for y in range(rows)]
     for _ in range(5):
         nxt = [[False] * cols for _ in range(rows)]
@@ -204,11 +208,11 @@ def _gen_cave(cols: int, rows: int, rng: random.Random):
     return grid, []
 
 
-def _gen_wilderness(cols: int, rows: int, rng: random.Random):
+def _gen_wilderness(cols: int, rows: int, rng: random.Random, density: float = 0.5):
     """Open field scattered with obstacle clumps (boulders / thickets)
-    that block sight. No doors."""
+    that block sight. No doors. ``density`` scales how many clumps."""
     grid = [[True] * cols for _ in range(rows)]
-    clumps = max(4, (cols * rows) // 45)
+    clumps = max(2, int((cols * rows) // 45 * (0.3 + 1.4 * density)))
     for _ in range(clumps):
         x = rng.randint(1, cols - 2)
         y = rng.randint(1, rows - 2)
@@ -220,31 +224,44 @@ def _gen_wilderness(cols: int, rows: int, rng: random.Random):
     return grid, []
 
 
-def _gen_tavern(cols: int, rows: int, rng: random.Random):
-    """A single walled building subdivided by one partition wall with a
-    door gap — a main hall + a back room."""
+def _spaced_pick(avail: list[int], n: int) -> list[int]:
+    """Pick ``n`` roughly-evenly-spaced values from a sorted list, keeping
+    ~3 cells between picks. Deterministic."""
+    if not avail or n <= 0:
+        return []
+    n = min(n, max(1, len(avail) // 3))
+    step = len(avail) / (n + 1)
+    picks = {avail[min(len(avail) - 1, int(step * i))] for i in range(1, n + 1)}
+    return sorted(picks)
+
+
+def _gen_tavern(cols: int, rows: int, rng: random.Random, density: float = 0.5):
+    """A single walled building subdivided by one or more parallel
+    partition walls, each with a door gap — a main hall plus back rooms in
+    a row (always connected). ``density`` scales the partition count 1→3."""
     grid = [[False] * cols for _ in range(rows)]
     rx, ry, rw, rh = 1, 1, cols - 2, rows - 2
     _carve_room(grid, rx, ry, rw, rh)
     doors: list[dict] = []
+    n_part = 1 + int(round(density * 2))  # 1..3
 
-    if rng.random() < 0.5 and rw >= 8:
-        # Vertical partition: passage crosses it horizontally, so the door
-        # is a vertical threshold segment at the gap cell's left edge.
-        px = rng.randint(rx + 3, rx + rw - 4)
-        gap = rng.randint(ry + 1, ry + rh - 2)
-        for y in range(ry, ry + rh):
-            if y != gap:
-                grid[y][px] = False
-        doors.append({"cx": px, "cy": gap, "edge": ("v", px, gap)})
+    if rw >= 8:
+        # Vertical partitions: passage crosses horizontally, so each door
+        # is a vertical threshold at the gap cell's left edge.
+        for px in _spaced_pick(list(range(rx + 3, rx + rw - 3)), n_part):
+            gap = rng.randint(ry + 1, ry + rh - 2)
+            for y in range(ry, ry + rh):
+                if y != gap:
+                    grid[y][px] = False
+            doors.append({"cx": px, "cy": gap, "edge": ("v", px, gap)})
     elif rh >= 8:
-        # Horizontal partition: door is a horizontal threshold at the gap.
-        py = rng.randint(ry + 3, ry + rh - 4)
-        gap = rng.randint(rx + 1, rx + rw - 2)
-        for x in range(rx, rx + rw):
-            if x != gap:
-                grid[py][x] = False
-        doors.append({"cx": gap, "cy": py, "edge": ("h", py, gap)})
+        # Horizontal partitions: each door is a horizontal threshold.
+        for py in _spaced_pick(list(range(ry + 3, ry + rh - 3)), n_part):
+            gap = rng.randint(rx + 1, rx + rw - 2)
+            for x in range(rx, rx + rw):
+                if x != gap:
+                    grid[py][x] = False
+            doors.append({"cx": gap, "cy": py, "edge": ("h", py, gap)})
     return grid, doors
 
 
@@ -420,6 +437,7 @@ def generate_map(
     *,
     size: str = _DEFAULT_SIZE,
     biome: str = _DEFAULT_BIOME,
+    density: float = 0.5,
     cell_px: int = 70,
     seed: Optional[int] = None,
 ) -> dict:
@@ -430,14 +448,17 @@ def generate_map(
     format (pixel-coord solid segments + toggleable door segments), ready
     to store on ``Map.walls``. ``size`` is one of :func:`size_presets`
     and ``biome`` one of :func:`biomes`; unknown values fall back to the
-    defaults. ``seed`` makes the output deterministic (same seed + biome →
+    defaults. ``density`` (clamped to [0, 1]) scales the biome's feature
+    richness — room / obstacle / partition count, or cave tightness.
+    ``seed`` makes the output deterministic (same seed + biome + density →
     same map + same walls).
     """
     cols, rows = _SIZE_PRESETS.get(size, _SIZE_PRESETS[_DEFAULT_SIZE])
     cfg = _BIOMES.get(biome, _BIOMES[_DEFAULT_BIOME])
     cell = max(20, min(int(cell_px), 200))
+    dens = max(0.0, min(1.0, float(density)))
     rng = random.Random(seed)
-    grid, doors = _GENERATORS[cfg["gen"]](cols, rows, rng)
+    grid, doors = _GENERATORS[cfg["gen"]](cols, rows, rng, dens)
     return {
         "png": _render(grid, doors, cell, cfg),
         "width_px": cols * cell,

@@ -845,6 +845,10 @@
                     <option value="large">Large (44×32)</option>
                 </select>
             </label>
+            <label style="display:flex;align-items:center;gap:8px;">Density
+                <input type="range" name="density" id="gen-map-density" min="0" max="100" value="50" style="flex:1;min-width:120px;">
+                <span id="gen-map-density-val" style="font-size:11px;color:var(--fg-mute);min-width:56px;text-align:right;">Normal</span>
+            </label>
             <label>Grid size (px) <input type="number" name="grid_size_px" value="70" min="20" max="300" style="width:80px;"></label>
             <label>Seed <input type="number" name="seed" placeholder="Optional — for a repeatable map" style="width:140px;"></label>
             <div><button type="submit" id="gen-map-btn">Generate</button></div>
@@ -854,13 +858,20 @@
                 const form = document.getElementById('gen-map-form');
                 const btn = document.getElementById('gen-map-btn');
                 const status = document.getElementById('gen-map-status');
+                const densInput = document.getElementById('gen-map-density');
+                const densVal = document.getElementById('gen-map-density-val');
                 if (!form) return;
                 function esc(s){const d=document.createElement('div');d.textContent=s==null?'':String(s);return d.innerHTML;}
+                if (densInput) densInput.addEventListener('input', () => {
+                    const v = +densInput.value;
+                    densVal.textContent = v <= 25 ? 'Sparse' : v >= 75 ? 'Dense' : 'Normal';
+                });
                 btn.addEventListener('click', () => {
                     const fd = new FormData();
                     fd.append('name', form.name.value);
                     fd.append('biome', form.biome.value);
                     fd.append('size', form.size.value);
+                    fd.append('density', form.density.value);
                     fd.append('grid_size_px', form.grid_size_px.value);
                     if (form.seed.value !== '') fd.append('seed', form.seed.value);
                     btn.disabled = true; status.style.display=''; status.textContent = 'Generating…';

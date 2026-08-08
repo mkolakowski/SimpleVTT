@@ -906,9 +906,10 @@ Shipped end-to-end — see [`TODONE.md`](TODONE.md) → Combat. Creature picker 
 Procedural map generation — produce a playable battle map without any external upload. **MVP done:** `POST /campaign/{cid}/settings/maps/generate` (+ the "✨ Generate a map" settings panel) draws a random dungeon — non-overlapping rooms, L-shaped corridors, doors at room thresholds — server-side to a PNG (`app/map_generator.py`, Pillow), stores it under `static/uploads/maps/`, and creates a `Map` row aligned to the grid, exactly like an uploaded image. Seeded → reproducible; three size presets (small/medium/large). Harness: `test_generate_map.py` (5).
 ✅ **Functional wall-segment population shipped v2.1049.0 "The Load-Bearing Wall"** — the generated map now populates `Map.walls` (Maps 2.0 LOS format): solid segments trace the room/corridor boundaries and each door threshold is a toggleable `door:true` segment, so vision occlusion + door open/close work out of the box. `generate_dungeon()` returns the walls alongside the PNG. Harness: `test_generate_populates_functional_walls`.
 ✅ **Biome presets shipped v2.1050.0 "The Cartographer's Palette"** — a `biome` picker with four styles: **dungeon** (rooms + corridors), **cave** (cellular-automata caverns, largest-region-pruned), **wilderness** (open field + obstacle clumps), **tavern** (walled building + doored partition), each with its own palette. All ride the v2.1049.0 wall pipeline. Harness: `test_generate_all_biomes` + `test_generate_bad_biome`.
-**Remaining follow-ups (filed):**
-- **Density/size sliders** — adjustable room count / corridor width / obstacle density beyond the three size presets.
-- **More biomes** — e.g. sewer, crypt, ruins, coastline (the four above are the TODO's named set; these are optional extensions).
+✅ **Density slider shipped v2.1051.0 "The Draftsman's Dial"** — a 0–100 Density knob scales each biome's feature richness (dungeon room count, cave tightness, wilderness obstacle count, tavern partition count 1→3). Wired into `generate_map(density=…)`, clamped server-side. Harness: `test_generate_density_changes_map`.
+**Remaining follow-ups (filed, all optional):**
+- **Custom size** — free cols/rows entry beyond the three size presets (dimensions already clamp at 8000 px).
+- **More biomes** — e.g. sewer, crypt, ruins, coastline (the four shipped are the TODO's named set; these are optional extensions).
 
 ### Bundled Art Assets (Maps, Player Tokens, Monster Tokens)
 Source and bundle a starter set of free-to-use art so new campaigns have something to work with out of the box. Three separate asset packs:

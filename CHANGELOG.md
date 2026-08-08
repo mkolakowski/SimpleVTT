@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1051.0] - 2026-08-08 — "The Draftsman's Dial"
+
+**Schema version:** 104
+
+**Commit summary:** A density slider tunes each map biome from sparse to dense.
+
+**Description:** Fourth Map Generator slice. Beyond the three fixed size presets, the "✨ Generate a map" panel gains a **Density** slider (0–100, labelled Sparse / Normal / Dense) that scales each biome's feature richness:
+
+- **Dungeon** — how many rooms are attempted (denser → a more warren-like floorplan).
+- **Cave** — the cellular-automata wall probability (denser → tighter passages, more rock).
+- **Wilderness** — how many obstacle clumps are scattered (denser → more cover).
+- **Tavern** — the partition count, 1→3 walls (denser → more back rooms). The tavern now supports multiple parallel doored partitions (`_spaced_pick` places them evenly and always leaves every room reachable through the door line).
+
+Density is a single knob wired into `generate_map(..., density=…)` and clamped to `[0, 1]` server-side (the endpoint takes a 0–100 int, out-of-range values clamp rather than 400). Generation stays fully seeded: the same `seed` + `biome` + `density` reproduces the map byte-for-byte.
+
+### Added
+
+- **Density knob** on all four biome generators (`_gen_dungeon` / `_gen_cave` / `_gen_wilderness` / `_gen_tavern` now take a `density` arg) plumbed through `generate_map(density=…)`. New `_spaced_pick` helper places evenly-spaced tavern partitions.
+- **Density slider** in the "✨ Generate a map" settings panel (live Sparse/Normal/Dense label).
+
+### Changed
+
+- **`POST /campaign/{cid}/settings/maps/generate`** accepts a `density` field (0–100, clamped).
+- **Harness:** `tests/harness/test_generate_map.py` (+1 → 9) — `test_generate_density_changes_map` asserts sparse vs dense (same biome + seed) yield different served images and that an out-of-range density clamps to a 200.
+
 ## [2.1050.0] - 2026-08-08 — "The Cartographer's Palette"
 
 **Schema version:** 104
