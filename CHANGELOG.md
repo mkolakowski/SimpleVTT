@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1055.0] - 2026-08-08 — "The Shifting Hood"
+
+**Schema version:** 104
+
+**Commit summary:** Cloak of Elvenkind's other half — Perception checks to see the wearer roll at disadvantage.
+
+**Description:** Closes a filed adv/disadv item tail. The Cloak of Elvenkind (RAW DMG p.158) has two halves: advantage on the wearer's Stealth checks (shipped v2.253.0) and *"Wisdom (Perception) checks made to see you have disadvantage"* — the target-side half, which had been GM-narrated because `/roll` didn't carry a perceived target.
+
+Now a `/roll` that is a **Perception** check may name a perceived target via `vs_character_id`; if that target wears an equipped + attuned item granting `imposes_perception_disadvantage_to_see` (the Cloak of Elvenkind), the check folds in a disadvantage source through the existing PHB p.173 composition (a perceiver's own advantage cancels it to a straight roll for free). It's the target-side mirror of the wearer-side Stealth advantage — read off the perceived creature's sheet, not the roller's.
+
+**Reconciliation:** while closing this, the sibling tail — Cloak of Displacement's *"if you take damage, the property ceases until the start of your next turn"* suppress-after-damage clause — turned out to be **already shipped at v2.645.0** (`cloak_disp_suppressed_round` stamped on the wearer's combatant when they take damage, read by `_target_wearer_imposes_attack_disadvantage`). The plan/TODO listing it as "still filed" was stale; corrected here. So after this commit both cloak tails are done; only Eyes-of-the-Eagle-style follow-ups + the out-of-scope Elven Accuracy remain on the adv/disadv plan.
+
+### Added
+
+- **`imposes_perception_disadvantage_to_see`** passive on the Cloak of Elvenkind, aggregated in `_equipped_item_effects` (boolean union + sources).
+- **`_roll_perception_disadvantage_vs_target`** — the `/roll`-time target-side read; folds disadvantage into a Perception check made against a `vs_character_id` wearing the cloak.
+- **Harness:** `tests/harness/test_item_cloak_of_elvenkind.py` (+4 → 9) — Perception-to-see-the-wearer rolls 2d20kl1 + names the cloak; controls: no target → straight, non-Perception vs wearer → cloak doesn't fire, Perception vs a non-wearer → straight.
+
+### Changed
+
+- **`POST /api/campaign/{cid}/roll`** accepts an optional `vs_character_id` (the perceived creature) for Perception checks.
+
 ## [2.1054.0] - 2026-08-08 — "The Rattling Dice"
 
 **Schema version:** 104

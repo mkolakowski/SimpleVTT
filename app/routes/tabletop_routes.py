@@ -22904,6 +22904,31 @@ async def roll_dice(
                 expr = expr.replace("1d20", "2d20kl1", 1)
                 roll_state_applied = f"auto_disadvantage_{cond_dis_key}"
 
+    # v2.1055.0 — Cloak of Elvenkind perception-disadvantage half (RAW DMG
+    # p.158): a Perception check made to SEE a wearer rolls at disadvantage.
+    # A TARGET-side read keyed on `vs_character_id`; composes with the prior
+    # roll_state / condition-disadvantage exactly like the block above
+    # (PHB p.173 cancel logic — advantage source + this = straight roll).
+    perceive_dis_key = _roll_perception_disadvantage_vs_target(
+        db, stat_key_lc, body.get("vs_character_id"),
+    )
+    if perceive_dis_key:
+        if roll_state_applied in ("auto_advantage", "manual_advantage"):
+            expr = _re.sub(
+                r"(?i)\b(?:2d20kh1|1d20a)\b", "1d20", expr, count=1,
+            )
+            roll_state_applied = (
+                f"canceled_{roll_state_applied}_vs_disadvantage_{perceive_dis_key}"
+            )
+        elif (roll_state_applied in ("auto_disadvantage", "manual_disadvantage")
+              or roll_state_applied.startswith("auto_disadvantage_")):
+            # Already at disadvantage — RAW adv/dis don't stack; no-op.
+            pass
+        else:
+            if "1d20" in expr and "2d20" not in expr:
+                expr = expr.replace("1d20", "2d20kl1", 1)
+                roll_state_applied = f"auto_disadvantage_{perceive_dis_key}"
+
     # v2.253.0 — Phase 4b: item-granted check advantage (Cloak of
     # Elvenkind → Stealth). Composes with the prior roll_state /
     # condition-disadvantage per RAW PHB p.173: an advantage source plus
@@ -38049,6 +38074,39 @@ def _roll_item_spell_save_advantage(
     return str(src or "item").strip().lower().replace(" ", "_")
 
 
+def _roll_perception_disadvantage_vs_target(
+    db: Session, stat_key_lc: str, vs_character_id,
+) -> "str | None":
+    """v2.1055.0 — the Cloak of Elvenkind's other half (RAW DMG p.158):
+    "Wisdom (Perception) checks made to see you have disadvantage."
+
+    Returns a normalized source key (lowercased, spaces→underscores) when
+    the ``/roll`` is a **Perception** check made against a named perceived
+    target (``vs_character_id``) whose sheet carries an equipped+attuned
+    item granting ``imposes_perception_disadvantage_to_see``; None
+    otherwise. This is a TARGET-side read (the perceived creature's sheet,
+    not the roller's), the mirror of the wearer-side Stealth advantage in
+    ``_roll_item_check_advantage``. The ``vs_character_id`` gate is
+    required because a generic ``/roll`` doesn't know *who* is being
+    perceived — only the caller does.
+    """
+    if stat_key_lc != "perception" or not vs_character_id:
+        return None
+    try:
+        tgt = db.query(Character).filter(
+            Character.id == int(vs_character_id)).first()
+    except (TypeError, ValueError):
+        return None
+    if not tgt:
+        return None
+    eff = _equipped_item_effects(tgt.sheet or {})
+    if not eff.get("imposes_perception_disadvantage_to_see"):
+        return None
+    srcs = eff.get("imposes_perception_disadvantage_to_see_sources") or []
+    src = srcs[0] if srcs else "Cloak of Elvenkind"
+    return str(src or "item").strip().lower().replace(" ", "_")
+
+
 # v2.156.0 — Phase 2e. RAW PHB Appendix A: Paralyzed / Stunned /
 # Unconscious / Petrified all auto-fail STR + DEX saving throws. This
 # is a SEPARATE mechanic from adv/dis — the d20 doesn't matter; the
@@ -43434,7 +43492,14 @@ _MAGIC_ITEM_PASSIVES: dict[str, list[dict]] = {
     # perceiver read (filed Phase 4b — the /roll doesn't carry a perceived
     # target). Read at /roll time via `_roll_item_check_advantage`.
     "cloak-of-elvenkind": [
-        {"check_advantage_on": ["stealth"], "requires_attunement": True},
+        # v2.1055.0 — the cloak's OTHER half (RAW DMG p.158): "Wisdom
+        # (Perception) checks made to see you have disadvantage." The /roll
+        # endpoint reads `imposes_perception_disadvantage_to_see` off a
+        # named perceived target's sheet (target-side), alongside the
+        # wearer-side Stealth advantage.
+        {"check_advantage_on": ["stealth"],
+         "imposes_perception_disadvantage_to_see": True,
+         "requires_attunement": True},
     ],
     # v2.254.0 — Eyes of the Eagle (RAW DMG p.166, uncommon, attunement).
     # "While wearing these lenses, you have advantage on Wisdom (Perception)
@@ -46286,6 +46351,14 @@ def _equipped_item_effects(sheet: dict) -> dict:
         # ATTUNEMENT-gated, so the walker's attunement check filters it.
         "incoming_attacks_have_disadvantage": False,
         "incoming_attacks_have_disadvantage_sources": [],
+        # v2.1055.0 — the Cloak of Elvenkind's OTHER half (RAW DMG p.158):
+        # "Wisdom (Perception) checks made to see you have disadvantage."
+        # Boolean OR across equipped+attuned items; read at /roll time by
+        # `_roll_perception_disadvantage_vs_target` (target-side: the
+        # perceived creature's sheet) when a Perception check names a
+        # `vs_character_id`. ATTUNEMENT-gated by the per-payload check.
+        "imposes_perception_disadvantage_to_see": False,
+        "imposes_perception_disadvantage_to_see_sources": [],
         # v2.253.0 — item-granted ability-check advantage (Cloak of
         # Elvenkind, RAW DMG p.158). `check_advantage_on` is the union of
         # skill keys (lowercased, e.g. "stealth") an equipped+attuned item
@@ -46777,6 +46850,14 @@ def _equipped_item_effects(sheet: dict) -> dict:
             ):
                 out["incoming_attacks_have_disadvantage"] = True
                 out["incoming_attacks_have_disadvantage_sources"].append(item_name)
+            # v2.1055.0 — Cloak of Elvenkind perception-disadvantage half:
+            # a Perception check to SEE the wearer rolls at disadvantage.
+            if (
+                item.get("_imposes_perception_disadvantage_to_see")
+                or p.get("imposes_perception_disadvantage_to_see")
+            ):
+                out["imposes_perception_disadvantage_to_see"] = True
+                out["imposes_perception_disadvantage_to_see_sources"].append(item_name)
             # v2.253.0 — item-granted check advantage (Cloak of Elvenkind,
             # RAW DMG p.158). A payload's `check_advantage_on` is a list of
             # skill keys (e.g. ["stealth"]); each is folded into the union

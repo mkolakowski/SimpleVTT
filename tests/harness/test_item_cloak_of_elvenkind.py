@@ -186,3 +186,73 @@ async def test_cloak_exposes_derived_flag(gm_client, rowan):
         "Cloak of Elvenkind" in str(v)
         for v in (flag.get("sources") or {}).values()
     ), f"expected the cloak named in sources, got: {flag!r}"
+
+
+# --- v2.1055.0 — the cloak's OTHER half: "Wisdom (Perception) checks made
+# to see you have disadvantage." A TARGET-side read: a perceiver rolls
+# Perception with `vs_character_id` = the wearer → 2d20kl1. ---
+
+async def _roll_perception(gm_client, perceiver_id, vs_character_id=None,
+                           stat_key="perception"):
+    body = {"expression": "1d20", "character_id": perceiver_id,
+            "stat_key": stat_key, "stat_ability": "WIS"}
+    if vs_character_id is not None:
+        body["vs_character_id"] = vs_character_id
+    return await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/roll", json=body)
+
+
+@pytest_asyncio.fixture
+def perceiver(roster):
+    return roster["Pip Quickfingers"]
+
+
+async def test_perception_to_see_wearer_has_disadvantage(
+    gm_client, rowan, perceiver,
+):
+    """A Perception check to see the cloak's wearer rolls at disadvantage
+    — 2d20kl1 + roll_state names the cloak."""
+    resp = await _roll_perception(gm_client, perceiver["id"], rowan["id"])
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert "2d20kl1" in (data.get("breakdown") or ""), (
+        f"Expected 2d20kl1; got breakdown={data.get('breakdown')!r}"
+    )
+    state = data.get("roll_state_applied") or ""
+    assert state.startswith("auto_disadvantage_"), state
+    assert "cloak_of_elvenkind" in state, state
+
+
+async def test_perception_without_target_is_straight(gm_client, perceiver):
+    """Control: a Perception check with no perceived target is a straight
+    1d20 — the disadvantage only fires against a named wearer."""
+    resp = await _roll_perception(gm_client, perceiver["id"], None)
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert "2d20kl1" not in (data.get("breakdown") or "")
+    assert data.get("roll_state_applied") in (None, "")
+
+
+async def test_non_perception_vs_wearer_is_straight(gm_client, rowan, perceiver):
+    """Control: the cloak's disadvantage is Perception-only — an
+    Investigation check to see the wearer does NOT pick up the cloak
+    disadvantage (the perceiver may still carry their own unrelated item
+    advantage, which is fine — we only pin that the cloak didn't fire)."""
+    resp = await _roll_perception(
+        gm_client, perceiver["id"], rowan["id"], stat_key="investigation")
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    state = data.get("roll_state_applied") or ""
+    assert "cloak_of_elvenkind" not in state, state
+    assert not state.startswith("auto_disadvantage_"), state
+
+
+async def test_perception_vs_non_wearer_is_straight(gm_client, perceiver, roster):
+    """Control: a Perception check to see a target who is NOT wearing the
+    cloak is a straight 1d20."""
+    tavik = roster["Brother Tavik Stonebrow"]
+    resp = await _roll_perception(gm_client, perceiver["id"], tavik["id"])
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert "2d20kl1" not in (data.get("breakdown") or "")
+    assert data.get("roll_state_applied") in (None, "")
