@@ -126681,14 +126681,13 @@ async def settings_generate_map(
     if not campaign or not _user_is_gm(user, campaign, db):
         raise HTTPException(403, "GM only")
 
-    from ..map_generator import generate_dungeon_png, size_presets
+    from ..map_generator import generate_dungeon, size_presets
 
     if size not in size_presets():
         raise HTTPException(400, "Unknown size")
     cell = max(20, min(int(grid_size_px), 300))
-    png, width_px, height_px = generate_dungeon_png(
-        size=size, cell_px=cell, seed=seed
-    )
+    dungeon = generate_dungeon(size=size, cell_px=cell, seed=seed)
+    png = dungeon["png"]
 
     from ..storage_quota import check_quota
     _q = check_quota(db, campaign_id, len(png))
@@ -126707,11 +126706,16 @@ async def settings_generate_map(
         thumbnail_url=None,
         grid_type=GridType.SQUARE,
         grid_size_px=cell,
-        width_px=max(200, min(int(width_px), 8000)),
-        height_px=max(200, min(int(height_px), 8000)),
+        width_px=max(200, min(int(dungeon["width_px"]), 8000)),
+        height_px=max(200, min(int(dungeon["height_px"]), 8000)),
         tags=["generated"],
         folder="",
         show_grid=True,
+        # v2.1049.0 — functional walls: solid segments trace the room /
+        # corridor boundaries and door thresholds become toggleable doors,
+        # so the Maps 2.0 line-of-sight + door engine works on generated
+        # maps out of the box.
+        walls=dungeon["walls"],
     )
     db.add(m)
     db.commit()
@@ -126719,9 +126723,13 @@ async def settings_generate_map(
     if not campaign.active_map_id:
         campaign.active_map_id = m.id
         db.commit()
+    door_count = sum(1 for w in dungeon["walls"] if w.get("door"))
     return {
         "ok": True,
-        "map": {"id": m.id, "name": m.name, "image_url": m.image_url},
+        "map": {
+            "id": m.id, "name": m.name, "image_url": m.image_url,
+            "walls": len(dungeon["walls"]), "doors": door_count,
+        },
     }
 
 

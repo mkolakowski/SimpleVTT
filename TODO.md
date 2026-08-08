@@ -904,9 +904,9 @@ Shipped end-to-end — see [`TODONE.md`](TODONE.md) → Combat. Creature picker 
 
 ### Map Generator — 🟠 MVP shipped v2.1048.0 "The Cartwright's Compass"
 Procedural map generation — produce a playable battle map without any external upload. **MVP done:** `POST /campaign/{cid}/settings/maps/generate` (+ the "✨ Generate a map" settings panel) draws a random dungeon — non-overlapping rooms, L-shaped corridors, doors at room thresholds — server-side to a PNG (`app/map_generator.py`, Pillow), stores it under `static/uploads/maps/`, and creates a `Map` row aligned to the grid, exactly like an uploaded image. Seeded → reproducible; three size presets (small/medium/large). Harness: `test_generate_map.py` (5).
+✅ **Functional wall-segment population shipped v2.1049.0 "The Load-Bearing Wall"** — the generated map now populates `Map.walls` (Maps 2.0 LOS format): solid segments trace the room/corridor boundaries and each door threshold is a toggleable `door:true` segment, so vision occlusion + door open/close work out of the box. `generate_dungeon()` returns the walls alongside the PNG. Harness: `test_generate_populates_functional_walls`.
 **Remaining follow-ups (filed):**
 - **Biome presets** — wilderness, tavern interior, cave (currently dungeon-only).
-- **Functional wall-segment population** — emit `Map.walls` from the generated layout so the Maps 2.0 line-of-sight / door engine works on generated maps (currently the walls are only drawn into the PNG, not interactive).
 - **Density/size sliders** — adjustable room count / corridor width beyond the three presets.
 
 ### Bundled Art Assets (Maps, Player Tokens, Monster Tokens)

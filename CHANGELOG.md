@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1049.0] - 2026-08-08 — "The Load-Bearing Wall"
+
+**Schema version:** 104
+
+**Commit summary:** Generated dungeons ship functional walls + toggleable doors, not just drawn pixels.
+
+**Description:** Follow-up to v2.1048.0's Map Generator. A generated dungeon now populates `Map.walls` in the Maps 2.0 line-of-sight format, so the vision-occlusion and door engines work on it out of the box — the walls aren't just painted into the PNG, they actually block sight.
+
+`app/map_generator.py` gains `_wall_segments()` and a `generate_dungeon()` entry point that returns `{png, width_px, height_px, walls}` built from the same layout that draws the image (so pixels and walls always agree). Solid wall runs trace every floor/non-floor boundary — merged into long segments per row/column rather than one-per-cell to keep the list small (a medium map is ~60–70 segments) — and each door threshold (the gap where a corridor meets a room) becomes a whole-segment door (`door: true, open: false`) with a stable `id`, so a player can click it open/closed and LOS updates live. Coordinates are map-image pixels, matching the hand-authored demo walls.
+
+The generate endpoint stores the walls on the new `Map` row and its JSON response now reports `walls` + `doors` counts (surfaced in the settings panel's success line: *"Created … — 64 walls, 7 doors"*). No schema change — `Map.walls` already existed.
+
+The remaining Map Generator follow-ups (biome presets, density/size sliders) stay filed on the TODO.
+
+### Added
+
+- **Functional walls on generated maps.** `app/map_generator.py` — `generate_dungeon(size, cell_px, seed)` returns the PNG **and** a `walls` list (pixel-coord solid segments + toggleable door segments); `generate_dungeon_png` is kept as a thin back-compat wrapper. Boundary edges are merged into runs; door thresholds emit `door: true` segments with stable ids.
+
+### Changed
+
+- **`POST /campaign/{cid}/settings/maps/generate`** now stores the generated `walls` on the `Map` row and returns `walls` + `doors` counts in the `map` object. The "✨ Generate a map" settings panel shows the counts on success.
+- **Harness:** `tests/harness/test_generate_map.py` (+1 → 6) — `test_generate_populates_functional_walls` asserts the generated map exposes walls via `GET …/map/{id}/walls`, every segment has the LOS shape, and a generated door toggles `open` via `POST …/door/{id}/toggle`. The happy-path test also asserts the `walls`/`doors` response counts.
+
 ## [2.1048.0] - 2026-08-08 — "The Cartwright's Compass"
 
 **Schema version:** 104

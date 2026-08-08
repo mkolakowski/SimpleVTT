@@ -9,6 +9,8 @@ Tests:
   - Happy path: 200 + JSON shape + the generated PNG is served + the map
     shows up in the maps list; cleaned up after.
   - Deterministic: the same seed yields byte-identical images.
+  - Functional walls: the generated Map carries walls + door segments in
+    the Maps 2.0 line-of-sight format, and a door toggles open.
   - 400 on an unknown size.
   - 403 for a player.
 """
@@ -35,6 +37,9 @@ async def test_generate_creates_map(gm_client):
         assert m["name"] == "Test Dungeon"
         assert m["image_url"].startswith("/static/uploads/maps/"), m
         assert m["image_url"].endswith(".png"), m
+        # Response reports the generated wall + door counts.
+        assert m["walls"] > 0, m
+        assert m["doors"] > 0, m
         # The generated PNG is actually served and looks like a PNG.
         img = await gm_client.get(m["image_url"])
         assert img.status_code == 200, img.text
@@ -42,6 +47,38 @@ async def test_generate_creates_map(gm_client):
     finally:
         if mid:
             await _delete_map(gm_client, mid)
+
+
+async def test_generate_populates_functional_walls(gm_client):
+    r = await gm_client.post(
+        f"/campaign/{CAMPAIGN_ID}/settings/maps/generate",
+        data={"size": "small", "seed": "42"},
+    )
+    assert r.status_code == 200, r.text
+    mid = r.json()["map"]["id"]
+    try:
+        w = await gm_client.get(
+            f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/walls")
+        assert w.status_code == 200, w.text
+        walls = w.json()["walls"]
+        assert len(walls) > 0, walls
+        # Every segment is a valid LOS wall (four pixel endpoints + id).
+        for seg in walls:
+            assert {"id", "x1", "y1", "x2", "y2"} <= set(seg), seg
+        # At least one toggleable door, and toggling it flips `open`.
+        doors = [s for s in walls if s.get("door")]
+        assert doors, walls
+        did = doors[0]["id"]
+        assert doors[0]["open"] is False, doors[0]
+        t = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/door/{did}/toggle")
+        assert t.status_code == 200, t.text
+        after = await gm_client.get(
+            f"/api/campaign/{CAMPAIGN_ID}/map/{mid}/walls")
+        opened = [s for s in after.json()["walls"] if s["id"] == did][0]
+        assert opened["open"] is True, opened
+    finally:
+        await _delete_map(gm_client, mid)
 
 
 async def test_generate_default_name(gm_client):

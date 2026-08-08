@@ -860,7 +860,9 @@
                         btn.disabled = false;
                         let d = {}; try { d = JSON.parse(xhr.responseText); } catch(_) {}
                         if (xhr.status !== 200 || !d.ok) { status.textContent = 'Generation failed (' + xhr.status + ').'; return; }
-                        status.innerHTML = '✅ Created ' + esc(d.map && d.map.name) + '.';
+                        var mp = d.map || {};
+                        var extra = (mp.doors != null) ? (' — ' + mp.walls + ' walls, ' + mp.doors + ' doors') : '';
+                        status.innerHTML = '✅ Created ' + esc(mp.name) + esc(extra) + '.';
                         setTimeout(() => location.reload(), 900);
                     };
                     xhr.onerror = () => { btn.disabled = false; status.textContent = 'Generation failed.'; };
