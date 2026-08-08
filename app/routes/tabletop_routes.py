@@ -5389,6 +5389,22 @@ def _target_hasnt_acted_yet(
     return not bool(target.get("has_acted", False))
 
 
+def _target_is_surprised(
+    campaign_id: int, target_combatant_id: "str | None",
+) -> bool:
+    """v2.1056.0 — server-side surprise state (RAW PHB p.189). Reads the
+    target combatant's ``surprised`` flag, set by ``/set_surprised`` (GM)
+    or ``/detect_surprise`` (Stealth vs passive Perception) and auto-cleared
+    when the creature takes its first turn. Consumed by the Assassinate
+    auto-crit so surprise no longer has to be declared per-attack by the
+    client. Defaults False on a missing combatant / inactive battle.
+    """
+    target = _lookup_combatant(campaign_id, target_combatant_id)
+    if not target:
+        return False
+    return bool(target.get("surprised", False))
+
+
 # v2.49.73 — distance-on-grid primitive. Extracted from token_move
 # (line ~5040, formerly inline). Matches the JS _computeRulerDistanceFt
 # math exactly so server-side range checks and client-side ruler
@@ -32181,6 +32197,60 @@ async def set_npc_death_saves(
         "ok": True, "combatant_id": combatant_id,
         "rolls_death_saves": rolls,
         "death_saves": target.get("death_saves"),
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/set_surprised")
+async def set_surprised(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.1056.0 — surprise-state model (RAW PHB p.189). Mark one or more
+    combatants surprised (or clear the flag). The `surprised` flag drives
+    the Assassin rogue's auto-crit server-side and auto-clears when the
+    creature takes its first turn.
+
+    Body: ``{combatant_ids: [...], surprised: bool}`` (or a single
+    ``combatant_id``). GM-only. Errors: 400 no ids; 403 non-GM; 404 no
+    battle. Unknown ids are skipped (reported in ``skipped``).
+    """
+    body = await request.json()
+    ids = body.get("combatant_ids")
+    if not ids:
+        single = str(body.get("combatant_id") or "").strip()
+        ids = [single] if single else []
+    ids = [str(i).strip() for i in ids if str(i).strip()]
+    surprised = bool(body.get("surprised", True))
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    if not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only — surprise is GM-authorised")
+    if not ids:
+        raise HTTPException(400, "combatant_ids is required")
+
+    state = hub.get_battle(campaign_id)
+    if not state:
+        raise HTTPException(404, "No active battle")
+    by_id = {c.get("id"): c for c in (state.get("combatants") or [])}
+    updated, skipped = [], []
+    for cid in ids:
+        c = by_id.get(cid)
+        if c is None:
+            skipped.append(cid)
+            continue
+        c["surprised"] = surprised
+        updated.append(cid)
+    hub.set_battle(campaign_id, state)
+    await hub.broadcast(campaign_id, {
+        "type": "battle_update", "data": state, "force_gm_sync": True,
+    })
+    return {
+        "ok": True, "surprised": surprised,
+        "updated": updated, "skipped": skipped,
     }
 
 
@@ -117017,7 +117087,14 @@ async def use_attack(
     # which doubles the damage dice below. RAW says "any HIT" — the existing
     # post-roll hit/miss gate handles application-on-miss, so this stays
     # damage-roll-time only.
-    if not is_save and target_surprised and _pc_has_assassin_subclass(sheet, 3):
+    # v2.1056.0 — also read the server-side surprise state on the target
+    # combatant (set by /set_surprised or /detect_surprise, auto-cleared on
+    # the target's first turn), so surprise no longer has to be declared
+    # per-attack. The client `target_surprised` flag still works for compat.
+    if not is_save and _pc_has_assassin_subclass(sheet, 3) and (
+        target_surprised
+        or _target_is_surprised(campaign_id, target_combatant_id)
+    ):
         is_crit = True
 
     # v2.364.0 — Adamantine Armor crit suppression (RAW DMG p.150). When
@@ -121526,6 +121603,17 @@ async def update_battle(
             _new_c["rolls_death_saves"] = _prev_c.get("rolls_death_saves")
         if "death_saves" not in _new_c and "death_saves" in _prev_c:
             _new_c["death_saves"] = _prev_c.get("death_saves")
+    # v2.1056.0 — carry forward the `surprised` flag (server-managed, set
+    # by /set_surprised or /detect_surprise, cleared on the target's first
+    # turn). Unlike death saves this applies to PC combatants too — a PC
+    # can be a surprised Assassinate target — so it does NOT skip char_id.
+    for _new_c in (state.get("combatants") or []):
+        _cid = _new_c.get("id")
+        if not _cid:
+            continue
+        _prev_c = _prev_combatants_by_id.get(_cid)
+        if _prev_c and "surprised" not in _new_c and "surprised" in _prev_c:
+            _new_c["surprised"] = _prev_c.get("surprised")
     for _new_c in (state.get("combatants") or []):
         _cid = _new_c.get("id")
         if not _cid or _new_c.get("char_id"):
@@ -121842,6 +121930,17 @@ async def update_battle(
         # target.
         if _active is not None:
             _active["has_acted"] = True
+            # v2.1056.0 — surprise ends once the creature takes its turn
+            # (RAW PHB p.189: a surprised creature does nothing on its
+            # first turn; surprise is spent thereafter). Clear the flag as
+            # the creature becomes active — by initiative order no ambusher
+            # can Assassinate-crit it during its own turn, so this is the
+            # clean lifecycle end. Persist immediately (the handler's main
+            # set_battle ran earlier) so the cleared state is
+            # server-authoritative, not reliant on the client round-trip.
+            if _active.get("surprised"):
+                _active["surprised"] = False
+                hub.set_battle(campaign_id, state)
         # v2.159.34 — legendary-actions Phase 1b: refresh the active
         # combatant's legendary-action pool to full on their turn start.
         # RAW DMG p.11: legendary action points refresh at the START

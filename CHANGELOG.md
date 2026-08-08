@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1056.0] - 2026-08-08 — "The Unseen Blade"
+
+**Schema version:** 104
+
+**Commit summary:** A server-side surprise-state model — the Assassin's auto-crit reads it instead of a per-attack client flag.
+
+**Description:** First half of Assassinate auto-surprise (the flagged game-rule follow-up). Until now, the Assassin rogue's *"any hit against a surprised creature is a critical hit"* relied on the attacker passing `target_surprised: true` in every attack body — there was no persistent notion of *which* creatures are surprised. This ships the surprise-state model:
+
+- **`surprised` flag** on the combatant dict in hub state (persisted to `Battle.state`, no schema change), set by **`POST /api/campaign/{cid}/set_surprised`** (GM; body `{combatant_ids, surprised}`, unknown ids reported in `skipped`).
+- **`/attack` reads it server-side** via `_target_is_surprised(campaign_id, target_combatant_id)` — an Assassin scoring a hit on a combatant carrying `surprised: true` auto-crits, with **no** `target_surprised` in the body. The legacy client flag still works (OR'd in) for compatibility.
+- **Auto-clears** when the creature takes its first turn — the turn-advance hook drops `surprised` beside the existing `has_acted` flip (RAW PHB p.189: surprise is spent after the first turn), and persists it immediately so the state is server-authoritative.
+- **Carried forward** across the `/battle` PUT (unlike death saves, this loop includes PC combatants — a PC can be a surprised target).
+
+The **auto-detection** of surprise (Stealth vs passive Perception) is the next commit; this one is the state substrate + the Assassinate read + lifecycle.
+
+### Added
+
+- **`POST /api/campaign/{cid}/set_surprised`** — GM marks/clears surprise on one or more combatants.
+- **`_target_is_surprised`** — the `/attack`-time read; wired into the Assassinate auto-crit branch alongside the legacy `target_surprised` flag.
+- **Turn-start auto-clear** of `surprised` + carry-forward across the battle PUT.
+- **Harness:** `tests/harness/test_set_surprised.py` (6) — toggle marks/clears, GM-only, 400 no-ids, unknown-skipped; an Assassin auto-crits a server-flagged surprised target (no client flag); the flag clears on the target's first turn.
+
 ## [2.1055.0] - 2026-08-08 — "The Shifting Hood"
 
 **Schema version:** 104
