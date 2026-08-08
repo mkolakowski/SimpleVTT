@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1052.1] - 2026-08-08 — "The Corrected Ledger"
+
+**Schema version:** 104
+
+**Commit summary:** Reconcile the SRD audit — the persistent-AoE enter-trigger shipped; it was mis-filed as un-built.
+
+**Description:** Doc-only reconciliation. Two lines in [`TODO.md`](TODO.md)'s v2.565.1 SRD-audit verify-pass still listed the *"enter-the-area-mid-move re-trigger"* for persistent damaging AoEs as **GM-narrated / "filed, unbuilt"** — the last supposedly-open buildable SRD mechanic. It is in fact **shipped**: [`aoe-enter-trigger.md`](docs/plans/aoe-enter-trigger.md) records Phases 1 + 3 landing at v2.567.0–v2.568.0 (Phase 2 N/A), and the code confirms it — `_trigger_persistent_aoe_on_move` is wired into both the token-move endpoint and `_force_move`, `_tick_persistent_aoe_start_of_turn` fires on turn advance, with a per-turn `_aoe_enter_triggered` dedupe, save-for-half, and caster/affects filters. A creature takes a persistent radius AoE's save+damage whether it walks in, is forced in, or starts its turn there. The 9-test `tests/harness/test_aoe_enter_trigger.py` passes green (re-run this session).
+
+No behavior change — this only corrects the stale audit text so the next contributor doesn't re-investigate a closed item. With this, the SRD audit's "gap #1" (spatial/object/scrying resolution) has no remaining *buildable-on-existing-substrate* mechanic; what's left is genuinely substrate-blocked (Forbiddance geometry, scrying views, object triggers) or out-of-SRD-scope.
+
+### Fixed
+
+- **Stale SRD-audit text in `TODO.md`** — the persistent-AoE enter-trigger is moved from the "GM-narrated / unbuilt" lists to the "now mechanical" list, citing the v2.567.0–v2.568.0 ship + `test_aoe_enter_trigger.py`.
+
 ## [2.1052.0] - 2026-08-08 — "The Surveyor's Chain"
 
 **Schema version:** 104
