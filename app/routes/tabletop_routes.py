@@ -11664,6 +11664,77 @@ def _log_stat_event(
         )
 
 
+def _npc_death_save_transition(
+    target: dict, *, hp_before: int, hp_after: int, hp_max: int,
+    damage_amount: int, is_crit: bool,
+) -> dict:
+    """v2.1053.0 — NPC death-save state machine (Phase 4 of
+    ``docs/plans/death-saves.md``). The boss-NPC mirror of the PC
+    ``_apply_hp_change`` dying/stable/dead transitions, minus the PC-only
+    drop-to-1 hooks (Relentless Endurance / Death Ward / Rage).
+
+    Only runs for a combatant flagged ``rolls_death_saves``; a normal NPC
+    still drops inert at 0 HP (this returns ``active: False`` and mutates
+    nothing). Mutates ``target["death_saves"]`` in place and returns
+    transition flags for the caller to broadcast + to gate on-death hooks.
+    """
+    if not target.get("rolls_death_saves"):
+        return {"active": False, "became_dying": False, "became_dead": False,
+                "status_changed": False, "death_saves": None}
+    ds = dict(target.get("death_saves") or {})
+    old_status = ds.get("status") or "alive"
+    successes = int(ds.get("successes") or 0)
+    failures = int(ds.get("failures") or 0)
+    new_status = old_status
+    became_dying = became_dead = False
+
+    if hp_after > 0:
+        # Healed / set above 0 — wake from any downed state.
+        if old_status in ("dying", "stable", "dead"):
+            new_status = "alive"
+            successes = failures = 0
+    elif old_status == "alive":
+        # Crossing into 0 HP. Massive-damage rule: remaining damage past 0
+        # ≥ max_hp → instant death; else start dying.
+        remaining = max(0, damage_amount - hp_before)
+        if hp_max > 0 and remaining >= hp_max:
+            new_status = "dead"
+            became_dead = True
+        else:
+            new_status = "dying"
+            became_dying = True
+        successes = failures = 0
+    elif old_status == "dying":
+        # Any damage while dying = 1 failure (2 on crit); ≥ max_hp kills.
+        if hp_max > 0 and damage_amount >= hp_max:
+            new_status = "dead"
+            became_dead = True
+            successes = failures = 0
+        else:
+            failures += 2 if is_crit else 1
+            if failures >= 3:
+                new_status = "dead"
+                became_dead = True
+                successes = failures = 0
+    elif old_status == "stable":
+        # Damage to a stable boss drops it back to dying with a failure.
+        if hp_max > 0 and damage_amount >= hp_max:
+            new_status = "dead"
+            became_dead = True
+            successes = failures = 0
+        else:
+            new_status = "dying"
+            became_dying = True
+            failures = 2 if is_crit else 1
+            successes = 0
+
+    ds = {"status": new_status, "successes": successes, "failures": failures}
+    target["death_saves"] = ds
+    return {"active": True, "became_dying": became_dying,
+            "became_dead": became_dead,
+            "status_changed": new_status != old_status, "death_saves": ds}
+
+
 async def _apply_damage_to_combatant(
     db: Session,
     campaign_id: int,
@@ -12394,6 +12465,19 @@ async def _apply_damage_to_combatant(
     hp_damage = applied - temp_absorbed
     new_hp = max(0, hp_cur - hp_damage)
     target["hp_current"] = new_hp
+    # v2.1053.0 — NPC death saves (Phase 4). A boss flagged
+    # ``rolls_death_saves`` enters the dying state at 0 HP instead of
+    # dropping inert-dead; further damage ticks failures; massive damage
+    # kills outright. A normal NPC is unaffected. ``npc_truly_dead`` gates
+    # the on-death hooks below so a merely-downed boss doesn't fire them.
+    _nds = _npc_death_save_transition(
+        target, hp_before=hp_cur, hp_after=new_hp, hp_max=hp_max,
+        damage_amount=applied, is_crit=is_crit,
+    )
+    npc_truly_dead = (
+        (_nds["death_saves"]["status"] == "dead") if _nds["active"]
+        else (new_hp == 0 and hp_max > 0)
+    )
     hub.set_battle(campaign_id, state)
     # v2.49.40 — ``force_gm_sync: True`` so the GM client picks up the
     # NPC HP change. Without this flag the GM ignores the broadcast
@@ -12411,6 +12495,21 @@ async def _apply_damage_to_combatant(
         "data": state,
         "force_gm_sync": True,
     })
+    # v2.1053.0 — surface the NPC death-save transition as its own event
+    # (a chat card / toast), keyed by combatant_id. Only when the state
+    # actually changed (dropped to dying, ticked a failure into death, …).
+    if _nds["active"] and _nds["status_changed"]:
+        await hub.broadcast(campaign_id, {
+            "type": "npc_death_save",
+            "data": {
+                "combatant_id": target.get("id"),
+                "name": target.get("name"),
+                "status": _nds["death_saves"]["status"],
+                "successes": _nds["death_saves"]["successes"],
+                "failures": _nds["death_saves"]["failures"],
+                "source": "damage",
+            },
+        })
     # v2.49.61: RAW Sleep — taking damage wakes the sleeper.
     await _wake_sleeping_on_damage(campaign_id, None, target.get("id"), applied)
     # v2.97.66 — damage-triggered repeated saves on NPCs. The helper
@@ -12464,7 +12563,7 @@ async def _apply_damage_to_combatant(
     # exceptions so a Keeper-of-Souls failure can't break the damage
     # pipeline. Sibling shape to v2.142.0 Scornful Rebuke (PC-side
     # on-damage-taken) but for the NPC-side on-death event.
-    if hp_cur > 0 and new_hp == 0 and hp_max > 0:
+    if npc_truly_dead and hp_cur > 0:
         await _fire_keeper_of_souls_on_npc_death(
             db, campaign_id, target, state,
         )
@@ -12482,7 +12581,7 @@ async def _apply_damage_to_combatant(
                 amount=int(applied), damage_type=damage_type,
                 is_crit=bool(is_crit),
             )
-            if hp_cur > 0 and new_hp == 0 and hp_max > 0:
+            if npc_truly_dead and hp_cur > 0:
                 _log_stat_event(
                     campaign_id, event_type="ko",
                     actor_char_id=int(attacker_char_id),
@@ -12500,8 +12599,11 @@ async def _apply_damage_to_combatant(
         # v2.99.416 — Phase 4.1 temp-HP absorption.
         "temp_absorbed": temp_absorbed,
         "temp_after": int(target.get("temp_hp") or 0),
-        "is_dying": False,
-        "is_dead": new_hp == 0 and hp_max > 0,
+        # v2.1053.0 — a boss with `rolls_death_saves` reports dying (not
+        # dead) at 0 HP; `is_dead` is now the true-death gate.
+        "is_dying": bool(
+            _nds["active"] and _nds["death_saves"]["status"] == "dying"),
+        "is_dead": npc_truly_dead,
         "uncanny_dodge_used": False,
     }
 
@@ -31951,6 +32053,68 @@ async def use_legendary_action(
         "aoe_results": aoe_results,
         "attack_result": attack_result,
         **payload,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/set_npc_death_saves")
+async def set_npc_death_saves(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.1053.0 — Phase 4 of ``docs/plans/death-saves.md``. Toggle whether
+    a boss NPC rolls death saving throws at 0 HP instead of dropping dead.
+
+    Body:
+      ``combatant_id`` — the NPC combatant's id.
+      ``rolls_death_saves`` — bool. True installs a fresh ``death_saves``
+          state (``alive``); False clears the flag + state.
+
+    Auth: GM only (NPCs are GM-controlled). Errors: 400 missing
+    ``combatant_id`` or a PC target; 403 non-GM; 404 no battle / combatant.
+    """
+    body = await request.json()
+    combatant_id = str(body.get("combatant_id") or "").strip()
+    rolls = bool(body.get("rolls_death_saves"))
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    if not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only — NPC death saves are GM-authorised")
+    if not combatant_id:
+        raise HTTPException(400, "combatant_id is required")
+
+    state = hub.get_battle(campaign_id)
+    if not state:
+        raise HTTPException(404, "No active battle")
+    target = None
+    for c in state.get("combatants") or []:
+        if c.get("id") == combatant_id:
+            target = c
+            break
+    if target is None:
+        raise HTTPException(404, "Combatant not found in active battle")
+    if target.get("char_id"):
+        # PCs track death saves on the Character sheet, not the combatant.
+        raise HTTPException(400, "PC death saves live on the character sheet")
+
+    target["rolls_death_saves"] = rolls
+    if rolls:
+        target.setdefault(
+            "death_saves",
+            {"status": "alive", "successes": 0, "failures": 0})
+    else:
+        target.pop("death_saves", None)
+    hub.set_battle(campaign_id, state)
+    await hub.broadcast(campaign_id, {
+        "type": "battle_update", "data": state, "force_gm_sync": True,
+    })
+    return {
+        "ok": True, "combatant_id": combatant_id,
+        "rolls_death_saves": rolls,
+        "death_saves": target.get("death_saves"),
     }
 
 
@@ -121224,6 +121388,22 @@ async def update_battle(
         c.get("id"): c for c in (_prev_battle.get("combatants") or [])
         if c.get("id")
     }
+    # v2.1053.0 — carry forward NPC death-save state. `rolls_death_saves`
+    # + `death_saves` are server-managed per-combatant fields; a routine
+    # init-tracker PUT that rewrites `state["combatants"]` without them
+    # would wipe a downed boss's dying state. Same carry-forward discipline
+    # as the lair flags / NPC concentration above.
+    for _new_c in (state.get("combatants") or []):
+        _cid = _new_c.get("id")
+        if not _cid or _new_c.get("char_id"):
+            continue  # PCs track death saves on the Character sheet
+        _prev_c = _prev_combatants_by_id.get(_cid)
+        if not _prev_c:
+            continue
+        if "rolls_death_saves" not in _new_c and "rolls_death_saves" in _prev_c:
+            _new_c["rolls_death_saves"] = _prev_c.get("rolls_death_saves")
+        if "death_saves" not in _new_c and "death_saves" in _prev_c:
+            _new_c["death_saves"] = _prev_c.get("death_saves")
     for _new_c in (state.get("combatants") or []):
         _cid = _new_c.get("id")
         if not _cid or _new_c.get("char_id"):

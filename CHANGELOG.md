@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.1053.0] - 2026-08-08 — "The Boss's Last Breath"
+
+**Schema version:** 104
+
+**Commit summary:** Boss NPCs can roll death saving throws at 0 HP instead of dropping dead (Phase 4a).
+
+**Description:** Opens Phase 4 of [`death-saves.md`](docs/plans/death-saves.md). Death saves have always been PC-only — state lives on `Character.sheet.death_saves`, and monsters drop dead at 0 HP per RAW. This ships the opt-in "a boss should roll saves" case:
+
+- **Toggle:** `POST /api/campaign/{cid}/set_npc_death_saves` (GM-only) flags an NPC combatant `rolls_death_saves` and installs a fresh `death_saves` state; toggling off clears both. 400 on a PC target, 404 on an unknown combatant.
+- **State machine:** `_npc_death_save_transition` mirrors the PC `_apply_hp_change` transitions on the combatant dict — a flagged boss crossing to 0 HP enters `dying` (not dead), damage-while-dying ticks a failure (two on a crit), massive damage (remaining ≥ max HP) still kills outright, and healing above 0 wakes it. A normal NPC is completely unchanged (still drops inert at 0).
+- **Where it lives:** `rolls_death_saves` + `death_saves` are per-combatant fields in the in-memory battle state (persisted to `Battle.state` JSON — no schema change). They're **carried forward** across the `/battle` PUT so a routine init-tracker save from a client that doesn't round-trip them can't wipe a downed boss's dying state.
+- **Broadcast:** a transition emits an `npc_death_save` event (`combatant_id` / `name` / `status` / `successes` / `failures` / `source`) for chat cards + the tracker. The on-death hooks (Keeper of Souls, KO stats) are gated on true death, so a merely-downed boss no longer fires them.
+
+The **turn-start auto-roll** of the NPC's death save is Phase 4b (next commit); this commit is the state + toggle + transition.
+
+### Added
+
+- **`POST /api/campaign/{cid}/set_npc_death_saves`** — GM toggle for per-NPC death saves.
+- **`_npc_death_save_transition`** — the NPC death-save state machine (boss-NPC mirror of `_apply_hp_change`), wired into the NPC branch of `_apply_damage_to_combatant`.
+- **`npc_death_save` broadcast** — fired on an NPC death-save state change.
+- **Harness:** `tests/harness/test_npc_death_saves.py` (7) — toggle set/clear, GM-only, PC-reject, 404; boss enters dying at 0 (+ `npc_death_save` event); unflagged NPC drops inert (control); damage-while-dying ticks a failure.
+
+### Changed
+
+- The NPC branch of `_apply_damage_to_combatant` now runs the death-save transition and gates the on-death hooks (Keeper of Souls, KO stat) on true death, so a downed-but-not-dead boss doesn't trigger them. `is_dead`/`is_dying` in the return reflect the death-save state.
+
 ## [2.1052.1] - 2026-08-08 — "The Corrected Ledger"
 
 **Schema version:** 104
